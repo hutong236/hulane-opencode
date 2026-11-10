@@ -68,3 +68,16 @@ test("local hard items (git/origin) failing still yields NOT_READY", () => {
   assert.ok(failedLocal.includes("git"));
   assert.ok(failedLocal.includes("origin"));
 });
+
+test("tag-only image workflow rejects lightweight tags and mismatched remote tag objects", () => {
+  const workflow = fs.readFileSync(
+    path.resolve(path.dirname(new URL(import.meta.url).pathname), "../hulane/templates/github-actions/build-image.yml"),
+    "utf8",
+  );
+  assert.match(workflow, /git cat-file -t/);
+  assert.match(workflow, /tag_type.*!= "tag"/);
+  assert.match(workflow, /git ls-remote --tags origin/);
+  assert.match(workflow, /remote_tag_object.*!=.*local_tag_object/);
+  assert.match(workflow, /git rev-parse.*\^commit/);
+  assert.match(workflow, /git merge-base --is-ancestor/);
+});

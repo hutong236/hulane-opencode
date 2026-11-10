@@ -142,6 +142,14 @@ npm test
 - Limit: 依旧需要在**独立 GitHub 沙盒仓库**验证 Ruleset 的 App 绑定/权限和实时 Checks 行为；此次为控制面决策逻辑加固。
 - Next: 对真实 GitHub sandbox 运行 Gate A/B/C、Release 元数据与负向回滚验收。
 
+### Step 12 — Release Tag 物理对象校验
+
+- Changed: `hulane/templates/github-actions/build-image.yml`、`test/preflight.test.mjs`。
+- Security: Tag-only GHCR 工作流拒绝轻量标签；验证远程与本地相同的 annotated tag 对象 SHA；由已验证的 tag 对象解析 commit，并继续校验默认分支祖先关系。
+- Regression: 静态工作流安全约束测试；实际 GitHub Release/GHCR 流程仍需独立沙盒发版实验。
+- Previous CI: [42855529087](https://github.com/hutong236/hulane-opencode/actions/runs/42855529087) 六 Job 全部通过。
+- Next: 防止交付验证仅凭调用者伪造的元数据/摘要就标记 registry_verified。
+
 ## 6. 后续步骤追加模板
 
 ```markdown

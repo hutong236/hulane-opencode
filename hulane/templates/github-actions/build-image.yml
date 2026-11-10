@@ -40,7 +40,21 @@ jobs:
           fi
           default_branch="$(gh api "repos/${GITHUB_REPOSITORY}" --jq .default_branch)"
           git fetch --no-tags origin "${default_branch}"
-          tag_sha="$(git rev-list -n 1 "${GITHUB_REF_NAME}")"
+          # Fail closed: a lightweight tag bypasses the intended Gate C
+          # annotated-tag lifecycle. Validate the object and its remote identity.
+          tag_ref="refs/tags/${GITHUB_REF_NAME}"
+          tag_type="$(git cat-file -t "${tag_ref}")"
+          if [[ "${tag_type}" != "tag" ]]; then
+            echo "Release requires a signed-off annotated tag object (Gate C), not a lightweight tag" >&2
+            exit 4
+          fi
+          local_tag_object="$(git rev-parse "${tag_ref}")"
+          remote_tag_object="$(git ls-remote --tags origin "${tag_ref}" | awk -v ref="${tag_ref}" '$2 == ref { print $1 }')"
+          if [[ -z "${remote_tag_object}" || "${remote_tag_object}" != "${local_tag_object}" ]]; then
+            echo "Remote tag object is missing or differs from the checked-out annotated tag" >&2
+            exit 5
+          fi
+          tag_sha="$(git rev-parse "${GITHUB_REF_NAME}^{commit}")"
           if ! git merge-base --is-ancestor "${tag_sha}" "origin/${default_branch}"; then
             echo "Tag commit ${tag_sha} is not contained in origin/${default_branch}" >&2
             exit 3
