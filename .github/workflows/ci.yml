@@ -34,3 +34,28 @@ jobs:
         run: npm ls @opencode/plugin --depth=0
       - name: Test V2 native Plugin.define and hook registration
         run: node --experimental-strip-types tests/sdk-smoke.mjs
+
+  opencode-cli-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install plugin dependencies
+        run: npm install --no-audit --no-fund
+      - name: Install real OpenCode V2 CLI
+        run: npm install -g @opencode/cli
+      - name: Verify executable and version
+        run: opencode --version
+      - name: Install into isolated project and validate startup
+        shell: bash
+        run: |
+          set -euo pipefail
+          TEST_REPO="$(mktemp -d)"
+          git -C "$TEST_REPO" init -q
+          node bin/install.mjs --project "$TEST_REPO"
+          cd "$TEST_REPO"
+          opencode mcp list
+          opencode plugin list
