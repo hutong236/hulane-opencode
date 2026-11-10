@@ -75,6 +75,7 @@ jobs:
             sleep 0.5
           done
           opencode --server http://127.0.0.1:43987 debug config | tee "$TEST_REPO/effective-config.txt"
+          opencode --server http://127.0.0.1:43987 debug agents > "$TEST_REPO/agent-list.json"
           opencode --server http://127.0.0.1:43987 plugin list --builtin | tee "$TEST_REPO/plugin-list.txt"
           grep -i 'opencode.config.mcp' "$TEST_REPO/plugin-list.txt"
           grep -i 'hulane' "$TEST_REPO/plugin-list.txt"
