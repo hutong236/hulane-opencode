@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { hostname } from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
@@ -31,7 +32,7 @@ function withStateWriteLock(root, operation) {
     throw error;
   }
   try {
-    fs.writeFileSync(fd, JSON.stringify({ pid: process.pid, started_at: new Date().toISOString() }) + "\n");
+    fs.writeFileSync(fd, JSON.stringify({ pid: process.pid, host: hostname(), started_at: new Date().toISOString() }) + "\n");
     return operation();
   } finally {
     try { fs.closeSync(fd); }

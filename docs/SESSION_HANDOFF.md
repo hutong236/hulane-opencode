@@ -103,6 +103,15 @@ npm test
 - Remaining: 中断遗留锁的人工安全恢复机制及并发建单压测。
 - Next: 增加防误删活跃进程锁的崩溃恢复工具。
 
+### Step 7 — 崩溃遗留状态写锁的安全恢复
+
+- Changed: `hulane/scripts/lib/state-lock-recovery.mjs`、`bin/recover-state-lock.mjs`、`hulane/scripts/lib/state-store.mjs`、`test/state-lock-recovery.test.mjs`。
+- Behavior: 状态写锁加入 hostname；默认恢复 dry-run，仅显式 `--apply` 删除满足同机、PID 确定不存在、锁龄至少 30s 的遗留锁；活跃 PID、外部主机、损坏元数据、新锁一律拒绝；用另一个排他恢复锁避免两个恢复进程竞态。
+- Usage: `node bin/recover-state-lock.mjs --project /path/to/repo --dry-run`，核实结果后 `--apply`。
+- Regression: 3 项死锁恢复、活跃/异地主机拦截、互斥恢复测试（待 CI 验证）。
+- Limit: 不提供不安全的强制解锁；异地主机/损坏锁需管理员线下审计，人工移除前须确保无写进程运行。
+- Next: 加强开单编号分配的冲突重试与远端副作用幂等。
+
 ## 6. 后续步骤追加模板
 
 ```markdown
