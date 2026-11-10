@@ -66,7 +66,7 @@ jobs:
           echo "Config loaded from: $OPENCODE_CONFIG"
           cat "$OPENCODE_CONFIG"
           opencode debug config --standalone
-          opencode --print-logs --log-level DEBUG mcp list --standalone | tee "$TEST_REPO/mcp-list.txt"
+          opencode --print-logs --log-level debug mcp list --standalone | tee "$TEST_REPO/mcp-list.txt"
           grep -i 'hulane-control' "$TEST_REPO/mcp-list.txt"
           opencode plugin list --standalone | tee "$TEST_REPO/plugin-list.txt"
           grep -i 'hulane' "$TEST_REPO/plugin-list.txt"
