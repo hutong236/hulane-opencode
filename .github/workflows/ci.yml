@@ -76,8 +76,21 @@ jobs:
           done
           opencode --server http://127.0.0.1:43987 debug config | tee "$TEST_REPO/effective-config.txt"
           opencode --server http://127.0.0.1:43987 debug agents > "$TEST_REPO/agent-list.json"
+          node - "$TEST_REPO/agent-list.json" <<'NODE'
+          const fs = require("node:fs");
+          const agents = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          const ids = new Set(agents.map(agent => agent.id));
+          for (const name of [
+            "hulane-orchestrator", "hulane-planner", "hulane-coder",
+            "hulane-designer", "hulane-design-critic", "hulane-tester",
+            "hulane-reviewer", "hulane-build-checker"
+          ]) {
+            if (!ids.has(name)) throw new Error("Missing OpenCode agent: " + name);
+          }
+          console.log("Verified 8 Hulane agents");
+          NODE
           opencode --server http://127.0.0.1:43987 plugin list --builtin | tee "$TEST_REPO/plugin-list.txt"
           grep -i 'opencode.config.mcp' "$TEST_REPO/plugin-list.txt"
           grep -i 'hulane' "$TEST_REPO/plugin-list.txt"
           opencode --server http://127.0.0.1:43987 mcp list | tee "$TEST_REPO/mcp-list.txt"
-          grep -i 'hulane-control' "$TEST_REPO/mcp-list.txt"
+          grep -E 'hulane-control[[:space:]]+connected' "$TEST_REPO/mcp-list.txt"

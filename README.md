@@ -5,9 +5,9 @@
 ## 当前状态
 - ✅ 上游 Hulane 3.10.0 的状态机、GitHub Issue/PR 同步、离线工单、Worktree、OpenSpec、MCP、交付核验源码作为独立快照纳入本仓库。
 - ✅ 迁入上游 Node.js 回归测试；CI 跑 Node.js 20/22（运行结果以 Actions 为准）。
-- 🧪 新 OpenCode V2 的 Commands、Agents、Skill、MCP 配置与插件安装器见 `opencode/` 和 `bin/install.mjs`，**尚未完成真实 OpenCode V2 端到端安全验收**。
+- 🧪 新 OpenCode V2 的 Commands、Agents、Skill、MCP 配置与插件安装器见 `opencode/` 和 `bin/install.mjs`，**已完成真实 CLI 的插件与 MCP 发现验证，尚未完成端到端研发流程及负向安全验收**。
 - ⚠️ 原 ZCode Hooks 保留作兼容/参考和回归测试，不会安装为 OpenCode Hooks；不能据此宣称强制权限门禁已验证。
-- ⚠️ OpenCode V2 SDK 尚在变化，`@opencode/plugin` 开发依赖尚未完成锁版本；生产使用前须锁定并验证具体版本。
+- ⚠️ OpenCode V2 SDK 尚在变化，已固定 `@opencode/plugin` 为 2.2.7，但仍需提交 lockfile 并完成完整版本验收；生产使用前须锁定并验证具体版本。
 
 ## 安装（开发环境）
 1. 使用 Node.js >=20，安装 OpenCode V2、Git、GitHub CLI 并完成 `gh auth login`。

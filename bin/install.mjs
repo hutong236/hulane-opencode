@@ -58,6 +58,7 @@ const expectedServer = {
   type: "local",
   command: [process.execPath, path.join(packageRoot, "hulane", "mcp", "server.mjs")],
   cwd: ".",
+  codemode: false,
   disabled: false
 };
 if (existingServers["hulane-control"] && !force && JSON.stringify(existingServers["hulane-control"]) !== JSON.stringify(expectedServer)) {
@@ -75,6 +76,7 @@ const expected = {
         type: "local",
         command: [process.execPath, path.join(packageRoot, "hulane", "mcp", "server.mjs")],
         cwd: ".",
+        codemode: false,
         disabled: false
       }
     }
@@ -83,7 +85,7 @@ const expected = {
 const existingRules = Array.isArray(config.permissions) ? [...config.permissions] : [];
 const required = [
   { action: "shell", resource: "*", effect: "ask" },
-  { action: "hulane_control_*", resource: "*", effect: "ask" }
+  { action: "hulane-control_*", resource: "*", effect: "deny" }
 ];
 // Existing explicit project rules must win over adapter's broad ask defaults.
 expected.permissions = [...required.filter(rule => !existingRules.some(r => JSON.stringify(r) === JSON.stringify(rule))), ...existingRules];

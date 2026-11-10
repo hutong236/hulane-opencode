@@ -21,7 +21,7 @@ permissions:
   - action: subagent
     resource: "hulane-*"
     effect: allow
-  - action: "hulane_control_*"
+  - action: "hulane-control_*"
     resource: "*"
     effect: ask
   - action: shell

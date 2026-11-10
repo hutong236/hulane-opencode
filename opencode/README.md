@@ -15,3 +15,5 @@ The OpenCode V2 native hooks do not make out-of-process terminal commands safe a
 ## Development check
 
 Run `npm test` in this source repository; then use `bin/install.mjs` against a disposable business repository. OpenCode beta SDK compatibility must be pinned with a lockfile in a tested version before release.
+
+OpenCode V2 MCP tools are exposed directly with `codemode: false`. The project-level rule denies `hulane-control_*`; only `hulane-orchestrator` overrides it to `ask`. All workers retain wildcard denial, with carefully scoped exceptions.
