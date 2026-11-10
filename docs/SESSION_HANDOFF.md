@@ -79,6 +79,14 @@ npm test
 - Validation: 当前提交发起新的 CI，结果以对应 GitHub Actions 为准。
 - Next: 读取 lockfile-bootstrap 日志，生成锁文件并从临时 Job 转换成 `npm ci`。
 
+### Step 4 — 提交真实 package-lock.json，切换 npm ci
+
+- Changed: `package-lock.json`、`.github/workflows/ci.yml`、`docs/SESSION_HANDOFF.md`。
+- Evidence: [Actions 42852462399](https://github.com/hutong236/hulane-opencode/actions/runs/42852462399) 的 `lockfile-bootstrap` Job 成功；原地生成的 lockfileV3 在提交前校验 `@opencode/plugin@2.2.7`，无非预期 npm Registry 网址。
+- Change: CI `opencode-v2-adapter` 和 `opencode-cli-integration` 改用 `npm ci`，删除临时 bootstrap Job；CLI 2.2.7 仍被精确固定。
+- Validation: 本步骤生成并校验了 lockfile JSON（272 条 package 记录，133474 bytes）；修改后的 CI 结果须查看对应提交 Actions，不能预先标记通过。
+- Next atomic task: 对安全授权与持久状态竞态做负向测试与增量加固。
+
 ## 6. 后续步骤追加模板
 
 ```markdown

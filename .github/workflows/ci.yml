@@ -21,21 +21,6 @@ jobs:
       - name: Core and regression tests
         run: npm test
 
-  lockfile-bootstrap:
-    # Temporary read-only CI job. Publish the generated lock as log output, not a GitHub write.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/feat/opencode-v2-initial-implementation'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: ''
-      - name: Resolve npm dependency lock without executing package scripts
-        run: |
-          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-          node -e "const fs=require('node:fs'); const lock=fs.readFileSync('package-lock.json'); console.log('HULANE_LOCK_BASE64='+lock.toString('base64'));"
-
   opencode-v2-adapter:
     runs-on: ubuntu-latest
     steps:
@@ -44,7 +29,7 @@ jobs:
         with:
           node-version: '22'
       - name: Install V2 plugin dependency
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
       - name: Show SDK version
         run: npm ls @opencode/plugin --depth=0
       - name: Test V2 native Plugin.define and hook registration
@@ -59,7 +44,7 @@ jobs:
         with:
           node-version: '22'
       - name: Install plugin dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
       - name: Install real OpenCode V2 CLI
         run: npm install -g @opencode/cli@2.2.7
       - name: Verify executable and version
