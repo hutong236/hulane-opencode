@@ -150,6 +150,13 @@ npm test
 - Previous CI: [42855529087](https://github.com/hutong236/hulane-opencode/actions/runs/42855529087) 六 Job 全部通过。
 - Next: 防止交付验证仅凭调用者伪造的元数据/摘要就标记 registry_verified。
 
+### Step 13 — 修复 Release workflow 静态检查正则
+
+- Changed: `test/preflight.test.mjs`。
+- Fix: 识别 Git 中 `^{commit}` 剥离 annotated tag 的真实语法；原提交中正则遗漏花括号，已在提交后立即复核发现。
+- Validation: 变更前本地正则无法匹配；修复后通过源码匹配检查，完整 CI 结果由本次 Actions 确认。
+- Next: 避免伪造的交付摘要和声明进入 verified 状态。
+
 ## 6. 后续步骤追加模板
 
 ```markdown
