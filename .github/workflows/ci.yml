@@ -65,8 +65,17 @@ jobs:
           export OPENCODE_CONFIG="$TEST_REPO/opencode.json"
           echo "Config loaded from: $OPENCODE_CONFIG"
           cat "$OPENCODE_CONFIG"
-          opencode debug config --standalone
-          opencode --print-logs --log-level debug mcp list --standalone | tee "$TEST_REPO/mcp-list.txt"
-          grep -i 'hulane-control' "$TEST_REPO/mcp-list.txt"
-          opencode plugin list --standalone | tee "$TEST_REPO/plugin-list.txt"
+          # Keep one real V2 server alive so initial async plugins/MCP can activate.
+          opencode serve --hostname 127.0.0.1 --port 43987 > "$TEST_REPO/server.log" 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          for retry in {1..20}; do
+            if curl --silent --fail http://127.0.0.1:43987/global/health >/dev/null; then break; fi
+            sleep 0.5
+          done
+          opencode --server http://127.0.0.1:43987 debug config | tee "$TEST_REPO/effective-config.txt"
+          opencode --server http://127.0.0.1:43987 plugin list --builtin | tee "$TEST_REPO/plugin-list.txt"
+          grep -i 'opencode.config.mcp' "$TEST_REPO/plugin-list.txt"
           grep -i 'hulane' "$TEST_REPO/plugin-list.txt"
+          opencode --server http://127.0.0.1:43987 mcp list | tee "$TEST_REPO/mcp-list.txt"
+          grep -i 'hulane-control' "$TEST_REPO/mcp-list.txt"
