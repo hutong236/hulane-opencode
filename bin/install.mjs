@@ -75,7 +75,7 @@ const expected = {
         type: "local",
         command: [process.execPath, path.join(packageRoot, "hulane", "mcp", "server.mjs")],
         cwd: ".",
-        enabled: true
+        disabled: false
       }
     }
   }
