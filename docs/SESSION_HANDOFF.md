@@ -181,6 +181,13 @@ npm test
 - Current validation: 控制面代码已推送；需要补充注入式真实远端模拟/错误路径单元测试，并在 GitHub 沙盒对真实 OCI attestation 验证。
 - Next: 补充远端 Release、GHCR、签名证据正/反向测试并在 CI 上运行。
 
+### Step 17 — 发布事实验证的模拟集成负向测试
+
+- Changed: `test/delivery-remote.test.mjs`。
+- New tests (4): 使用实际 `verifyLiveDelivery` 函数与可注入独立 GitHub/OCI 命令模拟器，覆盖成功 Action/tag/Release/Registry/Sigstore 两种 predicate；失败 Workflow、伪造 digest、轻量 tag、缺失 Release asset、元数据篡改、签名目标错误与调用者冒用证明哈希。
+- Validation: 完整 CI 必须通过；沙盒真实发布验收仍为单独门槛。
+- Next: 文档状态同步、Issue 验收任务列表与生产权限配置。
+
 ## 6. 后续步骤追加模板
 
 ```markdown
