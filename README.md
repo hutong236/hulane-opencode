@@ -30,5 +30,8 @@
 - [总体技术设计](docs/01-Hulane-OpenCode-总体设计.md)
 - [开发实施手册](docs/02-Hulane-OpenCode-开发实施手册.md)
 - [当前集成验收与未完成项](docs/03-OpenCode-集成验收与缺口.md)
+- [会话断点续作与逐步提交记录](docs/SESSION_HANDOFF.md)
+
+开发协作必须遵循根目录 [AGENTS.md](AGENTS.md)：**每完成一个独立步骤，立即 commit + push；更新交接记录并核对 CI，不能等待整个 Web 会话结束才提交。**
 
 源自 [hutong236/hutong-zcode-marketplace](https://github.com/hutong236/hutong-zcode-marketplace/tree/main/hulane)，版本与 SHA 记录见 [UPSTREAM_SOURCE.md](UPSTREAM_SOURCE.md)。MIT License。
