@@ -39,7 +39,7 @@ test("installer copies ten commands, eight agents, and skill to the target repo"
     assert.equal(cfg.mcp.servers["hulane-control"].codemode, false);
     assert.ok(cfg.permissions.some(rule => rule.action === "hulane-control_*" && rule.effect === "deny"));
     const orchestrator = fs.readFileSync(path.join(project, ".opencode", "agents", "hulane-orchestrator.md"), "utf8");
-    assert.match(orchestrator, /action: "hulane-control_\\*"[\\s\\S]*?effect: ask/);
+    assert.match(orchestrator, /action: "hulane-control_\*"[\\s\\S]*?effect: ask/);
     assert.equal(cfg.plugins[0].package, root);
     assert.equal(execute(project).status, 0);
     const rerun = JSON.parse(fs.readFileSync(path.join(project, "opencode.json"), "utf8"));
@@ -101,10 +101,10 @@ test("MCP authority is denied globally and allowed only as orchestrator ask", ()
     const md = fs.readFileSync(path.join(base, name), "utf8");
     const front = md.split("\n---\n")[0];
     if (name === "hulane-orchestrator.md") {
-      assert.match(front, /action: "hulane-control_\\*"[\\s\\S]*?effect: ask/);
+      assert.match(front, /action: "hulane-control_\*"[\\s\\S]*?effect: ask/);
     } else {
-      assert.match(front, /action: "\\*"[\\s\\S]*?effect: deny/);
-      assert.doesNotMatch(front, /action: "hulane-control_\\*"/);
+      assert.match(front, /action: "\*"[\\s\\S]*?effect: deny/);
+      assert.doesNotMatch(front, /action: "hulane-control_\*"/);
     }
   }
 });
