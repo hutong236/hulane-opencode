@@ -18,9 +18,6 @@ permissions:
   - action: "skill"
     resource: "*"
     effect: allow
-  - action: "edit"
-    resource: "*"
-    effect: allow
   - action: edit
     resource: ".hulane/designs/**"
     effect: ask

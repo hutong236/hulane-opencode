@@ -108,3 +108,10 @@ test("MCP authority is denied globally and allowed only as orchestrator ask", ()
     }
   }
 });
+
+test("designer may edit only its generated prototype location", () => {
+  const md = fs.readFileSync(path.join(root, "opencode", "agents", "hulane-designer.md"), "utf8");
+  const front = md.split("\n---\n")[0];
+  assert.match(front, /resource: "\.hulane\/designs\/\*\*"[\s\S]*?effect: ask/);
+  assert.doesNotMatch(front, /action: "edit"\s+resource: "\*"\s+effect: allow/);
+});
