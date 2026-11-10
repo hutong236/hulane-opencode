@@ -54,8 +54,14 @@ const currentPlugins = Array.isArray(config.plugins) ? config.plugins : [];
 const cleanedPlugins = currentPlugins.filter((value) =>
   value !== packageRoot && !(value && typeof value === "object" && value.package === packageRoot));
 const existingServers = config.mcp?.servers ?? {};
-if (existingServers["hulane-control"] && !force) {
-  throw new Error("Existing mcp.servers.hulane-control entry; use --force after review");
+const expectedServer = {
+  type: "local",
+  command: [process.execPath, path.join(packageRoot, "hulane", "mcp", "server.mjs")],
+  cwd: ".",
+  enabled: true
+};
+if (existingServers["hulane-control"] && !force && JSON.stringify(existingServers["hulane-control"]) !== JSON.stringify(expectedServer)) {
+  throw new Error("Existing mcp.servers.hulane-control entry conflicts; use --force after review");
 }
 const expected = {
   ...config,
