@@ -12,7 +12,7 @@ import {
 } from "../scripts/lib/github-state.mjs";
 import { createWorktree } from "../scripts/lib/worktree.mjs";
 import { issueAuthorization, issueReleaseAuthorization } from "../scripts/lib/authorization.mjs";
-import { validateDeliveryEvidence } from "../scripts/lib/delivery.mjs";
+import { verifyLiveDelivery } from "../scripts/lib/delivery-remote.mjs";
 import { verifyHumanApproval } from "../scripts/lib/human-approval.mjs";
 import { runPreflight } from "../scripts/lib/preflight.mjs";
 import { initializeTargetRepository } from "../scripts/lib/initializer.mjs";
@@ -450,8 +450,8 @@ export function callTool(name, args = {}, context = {}) {
   if (name === "hulane_verify_delivery") {
     const item = getItem(root, args.id);
     if (item.status !== "building") throw new Error("Delivery verification requires building state");
-    const patch = validateDeliveryEvidence({
-      item,
+    const patch = verifyLiveDelivery({
+      root, repository: repositoryFor(root, args.repository), item,
       workflowMetadata: args.workflow_metadata,
       releaseMetadata: args.release_metadata,
       registryDigest: args.registry_digest,

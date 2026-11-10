@@ -173,6 +173,14 @@ npm test
 - Regression: 工作流具备明确验证步骤、权限、精确镜像 digest 的静态合同测试；真正 GHCR 构建与签名仍需独立沙盒验证。
 - Next: `hulane_verify_delivery` 自行执行远端 Actions、Release、GHCR、Sigstore 验证，不再信任 Agent 输入的摘要。
 
+### Step 16 — 独立 GitHub / GHCR / Sigstore 发布证据核验
+
+- Changed: `hulane/scripts/lib/delivery-remote.mjs`、`hulane/mcp/tools.mjs`。
+- Security: `hulane_verify_delivery` 不再仅调用纯字段比较；重新查询 GitHub Actions 实际成功的 tag/commit run，查询 GitHub Release 和 annotated tag 对象，下载实际 Release 的 delivery-metadata.json，读取 GHCR Registry tag digest，并用 `gh attestation verify` 对锁定 OCI digest 的 SLSA 和 SPDX 签名证明做独立验证；本地字段摘要取已验证 Statement 哈希。
+- Fail closed: 无网络、无 Docker Buildx、无 GH CLI attestation 能力、缺失元数据/签名/授权时不记录 `image_verified`，Issue 保持未完成。
+- Current validation: 控制面代码已推送；需要补充注入式真实远端模拟/错误路径单元测试，并在 GitHub 沙盒对真实 OCI attestation 验证。
+- Next: 补充远端 Release、GHCR、签名证据正/反向测试并在 CI 上运行。
+
 ## 6. 后续步骤追加模板
 
 ```markdown
