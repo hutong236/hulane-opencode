@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createLocalWorkItem, initializeRepositoryState, readStore, writeStore, putItem } from "../hulane/scripts/lib/state-store.mjs";
 import { createWorkItem } from "../hulane/scripts/lib/state-machine.mjs";
 
@@ -71,5 +71,34 @@ test("atomic local Work Item allocation increments across REQ and BUG", () => {
     assert.equal(two.id, "BUG-2");
     assert.equal(Object.keys(readStore(root).items).length, 2);
     assert.equal(readStore(root).items["BUG-2"].issue_pending, true);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test("four independent OS processes allocate 32 unique consecutive Work Item IDs", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hulane-multi-process-"));
+  try {
+    execFileSync("git", ["init", "-q"], { cwd: root });
+    initializeRepositoryState(root, "acme/demo");
+    const moduleUrl = new URL("../hulane/scripts/lib/state-store.mjs", import.meta.url).href;
+    const script = [
+      `import { createLocalWorkItem } from ${JSON.stringify(moduleUrl)};`,
+      `for (let i = 0; i < 8; i++) {`,
+      `  const item = createLocalWorkItem(process.argv[1], { title: "Parallel", risk_level: "low", delivery_required: true, type: i % 2 ? "bug" : "feature" }, "acme/demo");`,
+      `  process.stdout.write(item.id + "\\n");`,
+      `}`,
+    ].join("\n");
+    const outputs = await Promise.all(Array.from({ length: 4 }, () => new Promise((resolve, reject) => {
+      const child = spawn(process.execPath, ["--input-type=module", "-e", script, root], { cwd: root });
+      let stdout = "", stderr = "";
+      child.stdout.on("data", chunk => { stdout += chunk; });
+      child.stderr.on("data", chunk => { stderr += chunk; });
+      child.on("error", reject);
+      child.on("close", code => code === 0 ? resolve(stdout) : reject(new Error("Child failed: " + stderr)));
+    })));
+    const ids = outputs.flatMap(text => text.trim().split(/\r?\n/));
+    assert.equal(ids.length, 32);
+    assert.equal(new Set(ids).size, 32, "multiple processes must never allocate duplicate IDs");
+    assert.deepEqual(ids.map(id => Number(id.split("-")[1])).sort((a, b) => a - b), Array.from({ length: 32 }, (_, i) => i + 1));
+    assert.equal(Object.keys(readStore(root).items).length, 32, "no Work Item update may be lost");
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });

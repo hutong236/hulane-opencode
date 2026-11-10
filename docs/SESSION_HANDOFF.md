@@ -120,6 +120,13 @@ npm test
 - Remaining: 真正并发的多个 OS 进程压力测试、崩溃恢复与云端 Issue 幂等仍需持续验证。
 - Next: 添加两个真实 Node 子进程同时创建工单的压力回归并核验连续编号。
 
+### Step 9 — 真实多进程分配回归
+
+- Changed: `test/state-store.test.mjs`。
+- New regression: 在同一真实临时 Git 仓库并行启动 4 个独立 Node.js OS 进程，每个创建 8 个 Work Item；断言 32 个编号无重复、数字部分连续、最终 Store 保留 32 个 Work Item。
+- Validation: 本提交 CI 执行后才能确定跨进程压力测试是否通过。若锁竞争超时，需要独立修复提交。
+- Next: 完整真实 OpenCode CLI 操作链与负向场景；GitHub 沙盒端到端仍然需要独立授权环境和 Ruleset。
+
 ## 6. 后续步骤追加模板
 
 ```markdown
