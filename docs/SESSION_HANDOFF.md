@@ -63,6 +63,13 @@ npm test
 - Validation: 静态校验和提交已执行；本次 GitHub Actions 完成前不得宣称通过，以该 Commit 对应 Actions 为准。
 - Next atomic task: 从 CI 生成真实 npm lockfile 后提交，CI 改用 `npm ci`。
 
+### Step 2 — 由真实 GitHub Runner 生成依赖锁（引导步骤）
+
+- Changed: `.github/workflows/ci.yml`
+- Purpose: 临时添加只读 `lockfile-bootstrap` Job，使用 Node.js 22 的 npm 解析实际 `@opencode/plugin@2.2.7` 依赖，输出 `package-lock.json` Base64 至 Actions 日志。
+- Validation: 通过 Actions 的 `lockfile-bootstrap` Job 验证；这一步是生成锁文件的可信输入，不把尚未生成的锁文件视为完成。
+- Next atomic task: 从已完成的 Job 日志读取实际 Base64、解码、提交真实 `package-lock.json`，删除临时 Job，并切换 `npm ci`。
+
 ## 6. 后续步骤追加模板
 
 ```markdown
