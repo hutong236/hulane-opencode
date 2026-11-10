@@ -97,3 +97,50 @@ jobs:
           grep -i 'hulane' "$TEST_REPO/plugin-list.txt"
           opencode --server http://127.0.0.1:43987 mcp list | tee "$TEST_REPO/mcp-list.txt"
           grep -E 'hulane-control[[:space:]]+connected' "$TEST_REPO/mcp-list.txt"
+
+  platform-install-smoke:
+    # macos-15 = Apple Silicon M1 arm64; ubuntu-24.04-arm = Linux aarch64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, ubuntu-24.04-arm]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify native ARM architecture
+        run: |
+          uname -a
+          test "$(node -p 'process.arch')" = arm64
+      - name: Restore locked dependency graph
+        run: npm ci --no-audit --no-fund
+      - name: Smoke OpenCode V2 plugin on ARM
+        run: node --experimental-strip-types tests/sdk-smoke.mjs
+      - name: Install pinned real CLI
+        run: |
+          npm install -g @opencode/cli@2.2.7
+          test "$(opencode --version | tr -d '\r\n')" = 'opencode v2.2.7'
+      - name: Install Hulane into a disposable Git project
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET="$(mktemp -d)"
+          git -C "$TARGET" init -q
+          git -C "$TARGET" config user.name 'Hulane CI'
+          git -C "$TARGET" config user.email 'hulane-ci@example.invalid'
+          echo smoke > "$TARGET/README.md"
+          git -C "$TARGET" add README.md
+          git -C "$TARGET" commit -qm initial
+          node bin/install.mjs --project "$TARGET" --dry-run
+          node bin/install.mjs --project "$TARGET"
+          test -f "$TARGET/opencode.json"
+          test -f "$TARGET/.opencode/agents/hulane-orchestrator.md"
+          node - "$TARGET/opencode.json" <<'NODE'
+          const fs = require('node:fs');
+          const cfg = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          if (!cfg.mcp?.servers?.['hulane-control']) throw new Error('Missing Hulane MCP');
+          console.log('ARM64 native project install and MCP config validated');
+          NODE

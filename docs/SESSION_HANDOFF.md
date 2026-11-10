@@ -87,6 +87,14 @@ npm test
 - Validation: 本步骤生成并校验了 lockfile JSON（272 条 package 记录，133474 bytes）；修改后的 CI 结果须查看对应提交 Actions，不能预先标记通过。
 - Next atomic task: 对安全授权与持久状态竞态做负向测试与增量加固。
 
+### Step 5 — macOS Apple Silicon 与 Linux ARM64 原生安装 Smoke
+
+- Changed: `.github/workflows/ci.yml`
+- Added: `platform-install-smoke` 矩阵：GitHub 官方 `macos-15`（Apple M1 ARM64）和 `ubuntu-24.04-arm`（Linux ARM64）。
+- Acceptance: ARM 原生 Node22、锁依赖 `npm ci`、SDK Plugin smoke、精确 CLI 2.2.7 安装、临时 Git 项目 dry-run + 安装、MCP 配置检查。
+- Limitation: 本项是 ARM64 **安装与加载 Smoke**，不是实际用户机器端到端安全验收；以对应 Actions 成功结果为准。
+- Next: 完善 Work Item 状态变更并发拒绝与锁崩溃恢复测试。
+
 ## 6. 后续步骤追加模板
 
 ```markdown
