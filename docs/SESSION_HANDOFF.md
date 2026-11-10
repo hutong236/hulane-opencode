@@ -95,6 +95,14 @@ npm test
 - Limitation: 本项是 ARM64 **安装与加载 Smoke**，不是实际用户机器端到端安全验收；以对应 Actions 成功结果为准。
 - Next: 完善 Work Item 状态变更并发拒绝与锁崩溃恢复测试。
 
+### Step 6 — 加强状态存储并发写入的原子性
+
+- Changed: `hulane/scripts/lib/state-store.mjs`、`hulane/mcp/tools.mjs`、`test/state-store.test.mjs`。
+- Implementation: `state-write.lock` 进程间独占写入；根状态修订号 CAS；同修订号 Work Item 冲突拒绝，完全相同的重试幂等；仅显式标记 `source:"github"` 的两处 GitHub hydrate 接受远端覆盖。
+- Regression: 新增 3 项锁、CAS、冲突/远端恢复测试；实际 CI 状态待核查。
+- Remaining: 中断遗留锁的人工安全恢复机制及并发建单压测。
+- Next: 增加防误删活跃进程锁的崩溃恢复工具。
+
 ## 6. 后续步骤追加模板
 
 ```markdown

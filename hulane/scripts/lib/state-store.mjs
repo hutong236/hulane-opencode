@@ -18,6 +18,28 @@ export function resolveControlDir(root) {
 
 export const STORE_RELATIVE_PATH = ".hulane/state.json";
 
+const STORE_WRITE_LOCK = "state-write.lock";
+
+function withStateWriteLock(root, operation) {
+  const directory = resolveControlDir(root);
+  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const lock = path.join(directory, STORE_WRITE_LOCK);
+  let fd;
+  try { fd = fs.openSync(lock, "wx", 0o600); }
+  catch (error) {
+    if (error.code === "EEXIST") throw new Error("State write locked: another process or an unrecovered crash owns the state store");
+    throw error;
+  }
+  try {
+    fs.writeFileSync(fd, JSON.stringify({ pid: process.pid, started_at: new Date().toISOString() }) + "\n");
+    return operation();
+  } finally {
+    try { fs.closeSync(fd); }
+    finally { fs.rmSync(lock, { force: true }); }
+  }
+}
+
+
 export function findRepositoryRoot(cwd = process.cwd()) {
   const result = spawnSync("git", ["rev-parse", "--show-toplevel"], { cwd, encoding: "utf8" });
   if (result.status !== 0) throw new Error("Current directory is not inside a Git repository");
@@ -63,7 +85,7 @@ export function readStore(root, { allowMissing = true } = {}) {
   return store;
 }
 
-export function writeStore(root, store) {
+function writeStoreUnlocked(root, store) {
   const directory = path.dirname(storePath(root));
   fs.mkdirSync(directory, { recursive: true });
   for (const item of Object.values(store.items)) validateWorkItem(item);
@@ -75,6 +97,20 @@ export function writeStore(root, store) {
   fs.writeFileSync(temporary, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
   fs.renameSync(temporary, storePath(root));
   return next;
+}
+
+
+export function writeStore(root, store) {
+  return withStateWriteLock(root, () => {
+    const filename = storePath(root);
+    const latestRevision = fs.existsSync(filename)
+      ? Number(JSON.parse(fs.readFileSync(filename, "utf8")).revision)
+      : 0;
+    if (Number(store.revision ?? 0) !== latestRevision) {
+      throw new Error(`Stale state write: expected revision ${store.revision ?? 0}, found ${latestRevision}`);
+    }
+    return writeStoreUnlocked(root, store);
+  });
 }
 
 export function initializeRepositoryState(root, repository = null) {
@@ -122,13 +158,25 @@ export function updateInfoExclude(root) {
   if (changed) fs.writeFileSync(excludePath, `${[...lines].join("\n")}\n`);
 }
 
-export function putItem(root, item) {
+export function putItem(root, item, { source = "local" } = {}) {
+  if (!["local", "github"].includes(source)) throw new Error("Unsupported state update source");
   validateWorkItem(item);
-  const store = readStore(root);
-  const existing = store.items[item.id];
-  if (existing && item.revision < existing.revision) throw new Error("Refusing to overwrite newer local state");
-  store.items[item.id] = item;
-  return writeStore(root, store);
+  return withStateWriteLock(root, () => {
+    const store = readStore(root);
+    const existing = store.items[item.id];
+    if (existing && source === "local") {
+      if (item.revision < existing.revision) throw new Error("Refusing to overwrite newer local state");
+      if (item.revision === existing.revision) {
+        if (JSON.stringify(item) !== JSON.stringify(existing)) {
+          throw new Error("Conflicting Work Item revision: stale concurrent update");
+        }
+        return store;
+      }
+    }
+    // Explicit exception for remote GitHub Issue canonical state rehydration.
+    store.items[item.id] = item;
+    return writeStoreUnlocked(root, store);
+  });
 }
 
 export function getItem(root, id) {

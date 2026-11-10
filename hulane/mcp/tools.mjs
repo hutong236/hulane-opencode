@@ -331,7 +331,7 @@ export function callTool(name, args = {}, context = {}) {
       } else {
         repository = repositoryFor(root, args.repository);
         item = hydrateItemFromGitHub({ repository, issueNumber: item.issue_number, cwd: root });
-        putItem(root, item);
+        putItem(root, item, { source: "github" });
         writeProjection(root, item);
       }
     }
@@ -353,7 +353,7 @@ export function callTool(name, args = {}, context = {}) {
 
   if (name === "hulane_hydrate") {
     const item = hydrateItemFromGitHub({ repository: repositoryFor(root, args.repository), issueNumber: args.issue_number, cwd: root });
-    putItem(root, item);
+    putItem(root, item, { source: "github" });
     return { item, projection_file: writeProjection(root, item) };
   }
 
