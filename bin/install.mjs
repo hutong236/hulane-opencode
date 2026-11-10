@@ -74,22 +74,17 @@ const expected = {
     }
   }
 };
-const rules = Array.isArray(config.permissions) ? [...config.permissions] : [];
+const existingRules = Array.isArray(config.permissions) ? [...config.permissions] : [];
 const required = [
   { action: "shell", resource: "*", effect: "ask" },
   { action: "hulane_control_*", resource: "*", effect: "ask" }
 ];
-for (const rule of required) {
-  if (!rules.some((r) => JSON.stringify(r) === JSON.stringify(rule))) rules.push(rule);
-}
-expected.permissions = rules;
+// Existing explicit project rules must win over adapter's broad ask defaults.
+expected.permissions = [...required.filter(rule => !existingRules.some(r => JSON.stringify(r) === JSON.stringify(rule))), ...existingRules];
 const configText = JSON.stringify(expected, null, 2) + "\n";
 const existingFiles = planned.filter(({ to, content }) => fs.existsSync(to) && !fs.readFileSync(to).equals(content));
-if (existingFiles.length && !force) {
+if (existingFiles.length && !force && !dryRun) {
   throw new Error("Existing files differ; refusing overwrite: " + existingFiles.map(x => x.to).join(", "));
-}
-if (fs.existsSync(configPath) && !force && fs.readFileSync(configPath, "utf8") !== configText) {
-  throw new Error("Existing opencode.json needs modification; inspect --dry-run then use --force (backup created)");
 }
 console.log("Project: " + project);
 console.log("Hulane source: " + packageRoot);

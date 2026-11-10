@@ -1,4 +1,5 @@
 import { Plugin } from "@opencode/plugin";
+import path from "node:path";
 import { evaluateCommand } from "../../hulane/hooks/guard.mjs";
 import { evaluateDisciplineBash, evaluateDisciplineEdit } from "../../hulane/scripts/lib/discipline.mjs";
 
@@ -15,9 +16,9 @@ export default Plugin.define({
       const guard = evaluateCommand({
         command,
         cwd,
-        token: event.env?.HULANE_AUTH_TOKEN,
-        releaseTagToken: event.env?.HULANE_RELEASE_TAG_TOKEN,
-        releasePushToken: event.env?.HULANE_RELEASE_PUSH_TOKEN,
+        token: event.env?.HULANE_AUTH_TOKEN ?? command.match(/(?:^|\\n)\\s*HULANE_AUTH_TOKEN=([^\\s]+)/)?.[1],
+        releaseTagToken: event.env?.HULANE_RELEASE_TAG_TOKEN ?? command.match(/(?:^|\\n)\\s*HULANE_RELEASE_TAG_TOKEN=([^\\s]+)/)?.[1],
+        releasePushToken: event.env?.HULANE_RELEASE_PUSH_TOKEN ?? command.match(/(?:^|\\n)\\s*HULANE_RELEASE_PUSH_TOKEN=([^\\s]+)/)?.[1],
       });
       if (!guard.allowed) throw new Error("Hulane Git gate: " + guard.reason);
     });
@@ -26,7 +27,7 @@ export default Plugin.define({
       const data = event.input ?? {};
       const filePath = data.file_path ?? data.filePath ?? data.path ?? "";
       if (!filePath) return;
-      const checked = evaluateDisciplineEdit({ filePath });
+      const checked = evaluateDisciplineEdit({ filePath: path.isAbsolute(filePath) ? filePath : path.join(ctx.location.directory, filePath) });
       if (!checked.allowed) throw new Error("Hulane config protection: " + checked.reason);
     });
   },
