@@ -188,6 +188,14 @@ npm test
 - Validation: 完整 CI 必须通过；沙盒真实发布验收仍为单独门槛。
 - Next: 文档状态同步、Issue 验收任务列表与生产权限配置。
 
+### Step 18 — 真实 MCP 子进程端到端离线生命周期测试
+
+- Changed: `test/mcp-real-stdio.test.mjs`。
+- Actual integration: CI 使用 Node `spawn` 启动实际 `hulane/mcp/server.mjs`（stdio JSON-RPC），逐条执行 initialize、tools/list、离线 open、伪造 human Gate A 拒绝、低风险 auto_intake、Worktree 创建和 status 读取；验证真实 Git worktree 隔离及本地持久化。
+- Limitation: 验收范围是 **MCP 真实进程 + 本地 Git**，不代表有权合并真实 GitHub PR、发 GHCR 镜像或真正运行 OpenCode Agent 任务。
+- Validation: 本次提交后的 CI 执行结果为准。
+- Next: 核查 CI、修复任何集成回归，并记录管理员权限/沙盒生产验收阻塞。
+
 ## 6. 后续步骤追加模板
 
 ```markdown
