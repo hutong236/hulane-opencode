@@ -3,7 +3,7 @@ import { hostname } from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { normalizeWorkItem, validateWorkItem } from "./state-machine.mjs";
+import { createWorkItem, nextLocalWorkItemNumber, normalizeWorkItem, validateWorkItem } from "./state-machine.mjs";
 
 export const CONTROL_DIR = ".hulane";
 // V3.0.0 更名前的控制目录:已初始化的存量仓库继续在旧目录下运行(guard、授权、
@@ -26,10 +26,14 @@ function withStateWriteLock(root, operation) {
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
   const lock = path.join(directory, STORE_WRITE_LOCK);
   let fd;
-  try { fd = fs.openSync(lock, "wx", 0o600); }
-  catch (error) {
-    if (error.code === "EEXIST") throw new Error("State write locked: another process or an unrecovered crash owns the state store");
-    throw error;
+  // Small bounded contention retry. Crash leftovers still fail closed.
+  for (let attempt = 0; attempt < 20; attempt++) {
+    try { fd = fs.openSync(lock, "wx", 0o600); break; }
+    catch (error) {
+      if (error.code !== "EEXIST") throw error;
+      if (attempt === 19) throw new Error("State write locked: another process or an unrecovered crash owns the state store");
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+    }
   }
   try {
     fs.writeFileSync(fd, JSON.stringify({ pid: process.pid, host: hostname(), started_at: new Date().toISOString() }) + "\n");
@@ -157,6 +161,28 @@ export function updateInfoExclude(root) {
     }
   }
   if (changed) fs.writeFileSync(excludePath, `${[...lines].join("\n")}\n`);
+}
+
+// Atomically allocates local Work Item numbers from the freshest store snapshot.
+// This removes the read-number/write-item race across OpenCode processes.
+export function createLocalWorkItem(root, input, repository = null) {
+  return withStateWriteLock(root, () => {
+    const store = readStore(root, { allowMissing: false });
+    if (repository && store.repository && repository !== store.repository) {
+      throw new Error(`State store belongs to ${store.repository}, not ${repository}`);
+    }
+    const id = `${input.type === "bug" ? "BUG" : "REQ"}-${nextLocalWorkItemNumber(store)}`;
+    if (store.items[id]) throw new Error("Work Item number collision: " + id);
+    const item = createWorkItem({
+      ...input, id, issue_pending: true, issue_number: null,
+      actor: "orchestrator",
+      evidence: `Local Work Item ${id} created offline; GitHub Issue pending flush`,
+    });
+    if (!store.repository && repository) store.repository = repository;
+    store.items[item.id] = item;
+    writeStoreUnlocked(root, store);
+    return item;
+  });
 }
 
 export function putItem(root, item, { source = "local" } = {}) {

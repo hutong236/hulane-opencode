@@ -112,6 +112,14 @@ npm test
 - Limit: 不提供不安全的强制解锁；异地主机/损坏锁需管理员线下审计，人工移除前须确保无写进程运行。
 - Next: 加强开单编号分配的冲突重试与远端副作用幂等。
 
+### Step 8 — 多进程本地开单编号原子分配
+
+- Changed: `hulane/scripts/lib/state-store.mjs`、`hulane/mcp/tools.mjs`、`test/state-store.test.mjs`。
+- Implementation: `createLocalWorkItem` 在同一个进程间锁内重新读取状态、分配 REQ/BUG 全局自增编号并持久化；`hulane_open_work_item` 不再先在锁外取编号。有限锁竞争重试（最多约 500ms），崩溃锁不自动抢占。
+- Regression: 原有离线开单/跨前缀编号测试 + 新增编号顺序测试；需以 CI 为准。
+- Remaining: 真正并发的多个 OS 进程压力测试、崩溃恢复与云端 Issue 幂等仍需持续验证。
+- Next: 添加两个真实 Node 子进程同时创建工单的压力回归并核验连续编号。
+
 ## 6. 后续步骤追加模板
 
 ```markdown

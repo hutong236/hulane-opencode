@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { initializeRepositoryState, readStore, writeStore, putItem } from "../hulane/scripts/lib/state-store.mjs";
+import { createLocalWorkItem, initializeRepositoryState, readStore, writeStore, putItem } from "../hulane/scripts/lib/state-store.mjs";
 import { createWorkItem } from "../hulane/scripts/lib/state-machine.mjs";
 
 test("state store binds once to a GitHub repository", () => {
@@ -56,5 +56,20 @@ test("existing state write lock is never stolen by another writer", () => {
     assert.throws(() => writeStore(root, readStore(root)), /State write locked/);
     assert.equal(readStore(root).revision, revision);
     assert.equal(fs.existsSync(lock), true);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test("atomic local Work Item allocation increments across REQ and BUG", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hulane-atomic-number-"));
+  try {
+    execFileSync("git", ["init", "-q"], { cwd: root });
+    initializeRepositoryState(root, "acme/demo");
+    const input = { title: "Offline work", risk_level: "low", delivery_required: true };
+    const one = createLocalWorkItem(root, { ...input, type: "feature" }, "acme/demo");
+    const two = createLocalWorkItem(root, { ...input, type: "bug" }, "acme/demo");
+    assert.equal(one.id, "REQ-1");
+    assert.equal(two.id, "BUG-2");
+    assert.equal(Object.keys(readStore(root).items).length, 2);
+    assert.equal(readStore(root).items["BUG-2"].issue_pending, true);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });

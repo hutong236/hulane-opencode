@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { applyEvent, createWorkItem, nextLocalWorkItemNumber, validateWorkItem, validateWorkItemInput } from "../scripts/lib/state-machine.mjs";
-import { findControlRoot, getItem, initializeRepositoryState, putItem, readStore } from "../scripts/lib/state-store.mjs";
+import { applyEvent, validateWorkItem, validateWorkItemInput } from "../scripts/lib/state-machine.mjs";
+import { createLocalWorkItem, findControlRoot, getItem, initializeRepositoryState, putItem, readStore } from "../scripts/lib/state-store.mjs";
 import {
   createIssue,
   findIssueByTitlePrefix,
@@ -282,13 +282,10 @@ export function callTool(name, args = {}, context = {}) {
       throw new Error(`State store belongs to ${configured}, not ${args.repository}`);
     }
     const repository = args.repository ?? configured ?? null;
-    const localNumber = nextLocalWorkItemNumber(readStore(root));
-    const prefix = args.type === "bug" ? "BUG" : "REQ";
-    const workItemId = `${prefix}-${localNumber}`;
+    // Initialization binds the repository and creates local support folders.
+    // Allocation and first state persist now happen in ONE guarded transaction.
     initializeRepositoryState(root, repository);
-    const item = createWorkItem({
-      id: workItemId,
-      issue_pending: true,
+    const item = createLocalWorkItem(root, {
       title: args.title,
       type: args.type,
       risk_level: args.risk_level,
@@ -299,9 +296,7 @@ export function callTool(name, args = {}, context = {}) {
       spec_sync_required: args.spec_sync_required,
       planner_summary: args.planner_summary,
       acceptance_criteria: args.acceptance_criteria,
-      actor: "orchestrator",
-      evidence: `Local Work Item ${workItemId} created offline; GitHub Issue pending flush`,
-    });
+    }, repository);
     const result = persist(root, item, {
       sync: true,
       repository,
