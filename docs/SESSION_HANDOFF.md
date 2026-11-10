@@ -55,6 +55,14 @@ npm test
 
 同时检查远端 [PR #1](https://github.com/hutong236/hulane-opencode/pull/1) 与 [Actions](https://github.com/hutong236/hulane-opencode/actions) 的最新提交与 CI 状态。若与本文件描述不一致，以 **GitHub 最新远端提交、PR、Actions 结果** 为准并先更新本文件。
 
+### Step 1 — 固定真实 CLI 版本
+
+- Branch: `feat/opencode-v2-initial-implementation`
+- Changed: `.github/workflows/ci.yml`
+- Implementation: `@opencode/cli` 改为固定安装 `2.2.7`，并在集成 Job 校验 `opencode --version` 精确等于 `2.2.7`。
+- Validation: 静态校验和提交已执行；本次 GitHub Actions 完成前不得宣称通过，以该 Commit 对应 Actions 为准。
+- Next atomic task: 从 CI 生成真实 npm lockfile 后提交，CI 改用 `npm ci`。
+
 ## 6. 后续步骤追加模板
 
 ```markdown

@@ -46,9 +46,12 @@ jobs:
       - name: Install plugin dependencies
         run: npm install --no-audit --no-fund
       - name: Install real OpenCode V2 CLI
-        run: npm install -g @opencode/cli
+        run: npm install -g @opencode/cli@2.2.7
       - name: Verify executable and version
-        run: opencode --version
+        run: |
+          ACTUAL="$(opencode --version | tr -d '\r\n')"
+          echo "OpenCode CLI version: $ACTUAL"
+          test "$ACTUAL" = "2.2.7"
       - name: Install into isolated project and validate startup
         shell: bash
         run: |
