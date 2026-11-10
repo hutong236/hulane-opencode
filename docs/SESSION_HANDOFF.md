@@ -70,6 +70,15 @@ npm test
 - Validation: 通过 Actions 的 `lockfile-bootstrap` Job 验证；这一步是生成锁文件的可信输入，不把尚未生成的锁文件视为完成。
 - Next atomic task: 从已完成的 Job 日志读取实际 Base64、解码、提交真实 `package-lock.json`，删除临时 Job，并切换 `npm ci`。
 
+### Step 3 — 修复精确版本验证误报
+
+- Changed: `.github/workflows/ci.yml`
+- Observed CI failure: [Actions 42852390530](https://github.com/hutong236/hulane-opencode/actions/runs/42852390530)。
+- Root cause: 真正的 `opencode --version` 输出是 `opencode v2.2.7`，而不是 `2.2.7`。
+- Fix: 版本检查精确对比 `opencode v2.2.7`；实际软件已按固定版本成功安装。
+- Validation: 当前提交发起新的 CI，结果以对应 GitHub Actions 为准。
+- Next: 读取 lockfile-bootstrap 日志，生成锁文件并从临时 Job 转换成 `npm ci`。
+
 ## 6. 后续步骤追加模板
 
 ```markdown
