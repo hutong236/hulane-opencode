@@ -20,7 +20,7 @@
     "check": "npm run check:syntax && npm test"
   },
   "dependencies": {
-    "@opencode/plugin": "latest"
+    "@opencode/plugin": "2.2.7"
   },
   "license": "MIT"
 }

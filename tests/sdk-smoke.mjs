@@ -25,7 +25,7 @@ try {
   assert.equal(git.status, 0, git.stderr);
   writeStore(sandbox, {
     schema_version: 2, repository: "acme/demo", revision: 0, updated_at: new Date().toISOString(),
-    items: { "REQ-12": { ...createWorkItem({ id: "REQ-12", issue_number: 12, title: "Smoke", risk_level: "low", delivery_required: false }), status: "doing" } }
+    items: { "REQ-12": { ...createWorkItem({ id: "REQ-12", issue_number: 12, title: "Smoke", risk_level: "low", delivery_required: true }), status: "doing" } }
   });
   assert.doesNotThrow(() => callbacks["shell:create.before"]({ command: "git status", cwd: sandbox, env: {} }));
   assert.throws(() => callbacks["shell:create.before"]({ command: "git push origin HEAD", cwd: sandbox, env: {} }), /Hulane Git gate|authorization|token/i);
