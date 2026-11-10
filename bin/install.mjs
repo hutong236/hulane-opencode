@@ -83,12 +83,18 @@ const expected = {
   }
 };
 const existingRules = Array.isArray(config.permissions) ? [...config.permissions] : [];
-const required = [
-  { action: "shell", resource: "*", effect: "ask" },
-  { action: "hulane-control_*", resource: "*", effect: "deny" }
+const shellAsk = { action: "shell", resource: "*", effect: "ask" };
+const mcpDeny = { action: "hulane-control_*", resource: "*", effect: "deny" };
+// OpenCode V2: last matching permission wins. Project rules may adjust shell
+// defaults, but MUST NOT turn the Hulane authority MCP back into allow.
+// Remove earlier duplicate denials so that repeated installs remain stable.
+const projectRules = existingRules.filter(rule =>
+  !(rule?.action === mcpDeny.action && rule?.resource === mcpDeny.resource && rule?.effect === mcpDeny.effect));
+expected.permissions = [
+  ...(existingRules.some(rule => JSON.stringify(rule) === JSON.stringify(shellAsk)) ? [] : [shellAsk]),
+  ...projectRules,
+  mcpDeny
 ];
-// Existing explicit project rules must win over adapter's broad ask defaults.
-expected.permissions = [...required.filter(rule => !existingRules.some(r => JSON.stringify(r) === JSON.stringify(rule))), ...existingRules];
 const configText = JSON.stringify(expected, null, 2) + "\n";
 const existingFiles = planned.filter(({ to, content }) => fs.existsSync(to) && !fs.readFileSync(to).equals(content));
 if (existingFiles.length && !force && !dryRun) {

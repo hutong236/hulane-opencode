@@ -127,6 +127,13 @@ npm test
 - Validation: 本提交 CI 执行后才能确定跨进程压力测试是否通过。若锁竞争超时，需要独立修复提交。
 - Next: 完整真实 OpenCode CLI 操作链与负向场景；GitHub 沙盒端到端仍然需要独立授权环境和 Ruleset。
 
+### Step 10 — 目标项目既有 allow 规则不能重开 MCP 权限
+
+- Changed: `bin/install.mjs`、`test/opencode-install.test.mjs`、`opencode/README.md`。
+- Security: installer 将最终 `hulane-control_*` deny 固定为项目 permissions **最后一条**，覆盖既有 `* allow`、`hulane-control_* allow` 和具体 secure-merge allow；其他项目 Shell 规则照旧，编排 Agent 的单独 ask 配置仍生效。
+- Regression: 宽泛和具体 MCP allow 负向测试、重装输出幂等；修订旧有 shell 规则断言（CI 待核查）。
+- Next: 对 permission hook 运行时针对 Coder/其他代理的控制和工具调用添加更完整集成测试；继续 PR/Gate E2E。
+
 ## 6. 后续步骤追加模板
 
 ```markdown

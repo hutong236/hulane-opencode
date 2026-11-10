@@ -58,7 +58,8 @@ test("installer preserves preexisting JSON config, backs it up, preserves strong
     assert.equal(r.status, 0, r.stderr);
     const cfg = JSON.parse(fs.readFileSync(path.join(project, "opencode.json"), "utf8"));
     assert.deepEqual(cfg.custom, { stable: true });
-    assert.deepEqual(cfg.permissions.at(-1), { action: "shell", resource: "*", effect: "deny" });
+    assert.deepEqual(cfg.permissions.at(-2), { action: "shell", resource: "*", effect: "deny" });
+    assert.deepEqual(cfg.permissions.at(-1), { action: "hulane-control_*", resource: "*", effect: "deny" });
     assert.ok(fs.readdirSync(project).some(x => x.startsWith("opencode.json.hulane-opencode.bak.")));
   } finally { fs.rmSync(project, { recursive: true, force: true }); }
 });
@@ -114,4 +115,25 @@ test("designer may edit only its generated prototype location", () => {
   const front = md.split("\n---\n")[0];
   assert.match(front, /resource: "\.hulane\/designs\/\*\*"[\s\S]*?effect: ask/);
   assert.doesNotMatch(front, /action: "edit"\s+resource: "\*"\s+effect: allow/);
+});
+
+test("installer puts Hulane MCP authority deny AFTER preexisting permissive rules", () => {
+  const project = createProject();
+  try {
+    fs.writeFileSync(path.join(project, "opencode.json"), JSON.stringify({
+      permissions: [
+        { action: "*", resource: "*", effect: "allow" },
+        { action: "hulane-control_*", resource: "*", effect: "allow" },
+        { action: "hulane-control_hulane_secure_merge", resource: "*", effect: "allow" }
+      ]
+    }));
+    assert.equal(execute(project).status, 0);
+    const configFile = path.join(project, "opencode.json");
+    const first = fs.readFileSync(configFile, "utf8");
+    const rules = JSON.parse(first).permissions;
+    assert.deepEqual(rules.at(-1), { action: "hulane-control_*", resource: "*", effect: "deny" });
+    assert.equal(rules.filter(rule => rule.action === "hulane-control_*" && rule.effect === "deny").length, 1);
+    assert.equal(execute(project).status, 0);
+    assert.equal(fs.readFileSync(configFile, "utf8"), first, "reinstall must be idempotent");
+  } finally { fs.rmSync(project, { recursive: true, force: true }); }
 });
