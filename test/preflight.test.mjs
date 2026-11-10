@@ -81,3 +81,15 @@ test("tag-only image workflow rejects lightweight tags and mismatched remote tag
   assert.match(workflow, /git rev-parse.*\^\{commit\}/);
   assert.match(workflow, /git merge-base --is-ancestor/);
 });
+
+test("tag-only image release publishes signed provenance and SPDX SBOM attestations", () => {
+  const workflow = fs.readFileSync(
+    path.resolve(path.dirname(new URL(import.meta.url).pathname), "../hulane/templates/github-actions/build-image.yml"), "utf8");
+  assert.match(workflow, /attestations: write/);
+  assert.match(workflow, /id-token: write/);
+  assert.match(workflow, /actions\/attest@v4/g);
+  assert.match(workflow, /anchore\/sbom-action@v0/);
+  assert.match(workflow, /subject-digest:.*steps\.build\.outputs\.digest/);
+  assert.match(workflow, /sbom-path: delivery-sbom\.spdx\.json/);
+  assert.match(workflow, /push-to-registry: true/);
+});

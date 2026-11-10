@@ -165,6 +165,14 @@ npm test
 - Regression: 3 项角色、旧 revision、不同作者、过期评论、PR head/tag、API 真实查询调用测试。
 - Next: 评估真实 GitHub沙盒门禁（需要独立沙盒仓库与服务端 Rulesets 权限）。
 
+### Step 15 — Signed GitHub Artifact Attestations for GHCR releases
+
+- Changed: `hulane/templates/github-actions/build-image.yml`、`test/preflight.test.mjs`。
+- Implementation: 镜像推送完成后由 `anchore/sbom-action@v0` 扫描实际 digest 生成 SPDX JSON，`actions/attest@v4` 分别产生并发布 Sigstore 签名的 SLSA Provenance 与 SPDX SBOM，subject 绑定 GHCR 精确 digest；生成证明失败会中止后续 Release metadata/Release。
+- Evidence: 使用 GitHub 官方 attestation 规范；可用 `gh attestation verify oci://ghcr.io/OWNER/IMAGE@sha256:... -R OWNER/REPO --predicate-type https://slsa.dev/provenance/v1` 和 SBOM predicate 单独验证。
+- Regression: 工作流具备明确验证步骤、权限、精确镜像 digest 的静态合同测试；真正 GHCR 构建与签名仍需独立沙盒验证。
+- Next: `hulane_verify_delivery` 自行执行远端 Actions、Release、GHCR、Sigstore 验证，不再信任 Agent 输入的摘要。
+
 ## 6. 后续步骤追加模板
 
 ```markdown

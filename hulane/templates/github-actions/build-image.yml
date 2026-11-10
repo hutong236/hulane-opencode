@@ -8,6 +8,7 @@ permissions:
   contents: write
   packages: write
   attestations: write
+  artifact-metadata: write
   id-token: write
 
 concurrency:
@@ -96,6 +97,31 @@ jobs:
           provenance: mode=max
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      # Produce independently verifiable, Sigstore-signed GitHub artifact
+      # attestations bound to the immutable GHCR image digest.
+      - name: Generate image SPDX SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ steps.release.outputs.image_name }}@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          output-file: delivery-sbom.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Sign build provenance
+        uses: actions/attest@v4
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ steps.release.outputs.image_name }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+          create-storage-record: false
+      - name: Sign image SPDX SBOM
+        uses: actions/attest@v4
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ steps.release.outputs.image_name }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          sbom-path: delivery-sbom.spdx.json
+          push-to-registry: true
+          create-storage-record: false
       - name: Write delivery metadata
         env:
           IMAGE: ${{ env.REGISTRY }}/${{ steps.release.outputs.image_name }}
