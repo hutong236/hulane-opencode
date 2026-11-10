@@ -50,13 +50,24 @@ export function evaluatePrCheckEvidence({
 
   const matches = (pr.statusCheckRollup ?? []).filter((check) => matchesCheck(check, checkName));
   if (!matches.length) throw new Error(`Required workflow check was not found: ${checkName}`);
-  const successful = matches.find(checkSucceeded);
-  if (!successful) throw new Error(`PR workflow check has not succeeded: ${checkName}`);
+  // A passing duplicate must never shadow a pending/failed same-name run.
+  // The GitHub rollup is tied to the exact current headRefOid.
+  if (!matches.every(checkSucceeded)) throw new Error(`PR workflow check has not succeeded for every matching run: ${checkName}`);
+  const successful = matches[0];
   const url = checkUrl(successful);
   if (!/^https:\/\/github\.com\//.test(String(url ?? ""))) {
     throw new Error(`PR workflow check is missing a GitHub details URL: ${checkName}`);
   }
 
+  const rollup = pr.statusCheckRollup ?? [];
+  // Required checks are independently enforced by GitHub, but the control
+  // plane must also validate every required context against the current PR.
+  for (const context of requiredContexts) {
+    const matched = rollup.filter(check => contextMatchesCheck(context, check));
+    if (!matched.length || !matched.every(checkSucceeded)) {
+      throw new Error(`Required GitHub check is missing or unsuccessful: ${context}`);
+    }
+  }
   const serverEnforced = requiredContexts.some((context) => contextMatchesCheck(context, successful));
   if (!serverEnforced && !isPrivate) {
     throw new Error("Public repositories must enforce the PR check with GitHub branch protection or a ruleset");
@@ -105,6 +116,12 @@ function rulesetContexts(rules) {
   });
 }
 
+export function assertDefaultBranchTarget(prBase, defaultBranch) {
+  if (!String(defaultBranch ?? "").trim() || prBase !== defaultBranch) {
+    throw new Error(`PR must target the repository default branch (${defaultBranch ?? "<unknown>"}), found ${prBase ?? "<missing>"}`);
+  }
+}
+
 export function verifyPullRequestChecks({ root, repository, item, checkName = DEFAULT_PR_CHECK }) {
   if (item.status !== "pr_checking") throw new Error("PR check verification requires pr_checking state");
   if (!Number.isInteger(item.pr_number)) throw new Error("PR check verification requires a recorded PR number");
@@ -118,8 +135,9 @@ export function verifyPullRequestChecks({ root, repository, item, checkName = DE
   ], { cwd: root }));
   if (pr.number !== item.pr_number) throw new Error("GitHub returned a different PR number");
 
-  const base = pr.baseRefName ?? repositoryInfo.defaultBranchRef?.name;
-  if (!base) throw new Error("Could not resolve the pull request base branch");
+  const base = pr.baseRefName;
+  const defaultBranch = repositoryInfo.defaultBranchRef?.name;
+  assertDefaultBranchTarget(base, defaultBranch);
   const protection = safeJsonGh(["api", `repos/${repository}/branches/${base}/protection`], root, null);
   const rules = safeJsonGh(["api", `repos/${repository}/rules/branches/${base}`], root, []);
   const requiredContexts = [...new Set([

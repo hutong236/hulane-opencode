@@ -134,6 +134,14 @@ npm test
 - Regression: 宽泛和具体 MCP allow 负向测试、重装输出幂等；修订旧有 shell 规则断言（CI 待核查）。
 - Next: 对 permission hook 运行时针对 Coder/其他代理的控制和工具调用添加更完整集成测试；继续 PR/Gate E2E。
 
+### Step 11 — Gate B 检查结果与 PR Base 加固
+
+- Changed: `hulane/scripts/lib/pr-checks.mjs`、`test/pr-checks.test.mjs`。
+- Security: 同名 check 有任何 pending/failed 即拒绝；逐一要求所有 GitHub branch protection/ruleset 必需 contexts 出现在当前 PR 检查中且全部通过；业务 PR Base 必须是仓库的真实默认分支。
+- Regression: 同名冲突、缺失/待运行的必需 context、非默认分支 PR 拦截（新增 3 项测试）。
+- Limit: 依旧需要在**独立 GitHub 沙盒仓库**验证 Ruleset 的 App 绑定/权限和实时 Checks 行为；此次为控制面决策逻辑加固。
+- Next: 对真实 GitHub sandbox 运行 Gate A/B/C、Release 元数据与负向回滚验收。
+
 ## 6. 后续步骤追加模板
 
 ```markdown
