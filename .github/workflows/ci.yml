@@ -57,5 +57,10 @@ jobs:
           git -C "$TEST_REPO" init -q
           node bin/install.mjs --project "$TEST_REPO"
           cd "$TEST_REPO"
-          opencode mcp list
-          opencode plugin list
+          export OPENCODE_CONFIG="$TEST_REPO/opencode.json"
+          echo "Config loaded from: $OPENCODE_CONFIG"
+          cat "$OPENCODE_CONFIG"
+          opencode mcp list | tee "$TEST_REPO/mcp-list.txt"
+          grep -i 'hulane-control' "$TEST_REPO/mcp-list.txt"
+          opencode plugin list | tee "$TEST_REPO/plugin-list.txt"
+          grep -i 'hulane' "$TEST_REPO/plugin-list.txt"
