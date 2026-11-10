@@ -1,0 +1,26 @@
+{
+  "name": "hulane-opencode",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Independent Hulane workflow control for OpenCode V2",
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": "./opencode/plugin/index.ts"
+  },
+  "bin": {
+    "hulane-opencode-install": "./bin/install.mjs"
+  },
+  "scripts": {
+    "test": "node --test",
+    "test:core": "node --test test/*.test.mjs",
+    "check:syntax": "node --check bin/install.mjs && node --check hulane/mcp/server.mjs && node --check hulane/scripts/lib/state-machine.mjs",
+    "check": "npm run check:syntax && npm test"
+  },
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  },
+  "license": "MIT"
+}

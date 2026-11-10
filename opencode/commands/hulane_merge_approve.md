@@ -1,0 +1,8 @@
+---
+description: "显式批准高风险的 Hulane PR 合并（Gate B），然后停在人工 tag/镜像确认关口。"
+agent: hulane-orchestrator
+---
+
+First load the `hulane-development` skill. This is the OpenCode V2 port: use the `hulane-control` MCP tools as the sole source of authority for lifecycle transitions; never fabricate evidence. For legacy Bash steps, obey the OpenCode V2 plugin shell guard and the exact worktree restrictions. Do not claim Done unless the control plane verifies it.
+
+The user explicitly authorizes merge for $ARGUMENTS. This command covers high-risk merges under either merge guard. Call `hulane_status` with GitHub refresh when resuming across sessions or when local state is stale or suspect (a `hulane_verify_pr_checks` performed in this session is revision-guarded and fresh), and verify waiting_human_merge, passed Tester/Reviewer/workflow checks, persisted `pr_head_sha`, a verified merge guard, and no blocker. Call `hulane_transition(approve_merge, actor=human:<identity>)` to persist Gate B; approval never bypasses checks. Perform exactly one repository-compatible merge command that includes `--match-head-commit <persisted-pr-head-sha>` — no token is needed, the guard state-verifies merges from the `merging` state. Verify merged SHA, call `hulane_transition(pr_merged)` with that SHA, then split by the persisted delivery policy: when delivery_required is false and skip_allowed is true, record `policy_skip` citing the Gate A approval, close the exact Issue once (state-verified, no token), record issue_closed, housekeep the merged worktree — plain `git worktree remove <worktree_path>` (never `--force`) then `git branch -d <branch>` from the managed repository — and report Done; otherwise STOP at waiting_tag_confirm. Never invoke the legacy state CLI.
