@@ -1,6 +1,7 @@
 import { Plugin } from "@opencode/plugin";
 import path from "node:path";
 import { evaluateCommand } from "../../hulane/hooks/guard.mjs";
+import { evaluateCoderWorktree } from "../../hulane/scripts/lib/opencode-worktree-guard.mjs";
 import { evaluateDisciplineBash, evaluateDisciplineEdit } from "../../hulane/scripts/lib/discipline.mjs";
 
 // OpenCode V2 adapter. No ZCode lifecycle JSON is loaded here.
@@ -8,6 +9,13 @@ import { evaluateDisciplineBash, evaluateDisciplineEdit } from "../../hulane/scr
 export default Plugin.define({
   id: "hulane",
   async setup(ctx) {
+    await ctx.permission.hook("evaluate", (event) => {
+      const result = evaluateCoderWorktree({
+        agent: event.agent, action: event.action,
+        resources: event.resources, locationDirectory: ctx.location.directory,
+      });
+      if (!result.allowed) { event.effect = "deny"; event.message = result.reason; }
+    });
     await ctx.shell.hook("create.before", (event) => {
       const command = String(event.command ?? "");
       const cwd = String(event.cwd ?? ctx.location.directory);

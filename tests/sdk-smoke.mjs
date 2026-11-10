@@ -14,9 +14,14 @@ const callbacks = {};
 await plugin.setup({
   location: { directory: process.cwd(), project: { id: "test", directory: process.cwd(), canonical: process.cwd() } },
   shell: { hook: async (event, callback) => { callbacks["shell:" + event] = callback; } },
+  permission: { hook: async (event, callback) => { callbacks["permission:" + event] = callback; } },
   tool: { hook: async (event, callback) => { callbacks["tool:" + event] = callback; } }
 });
 assert.equal(typeof callbacks["shell:create.before"], "function");
+assert.equal(typeof callbacks["permission:evaluate"], "function");
+const unsafeCoder = { agent: "hulane-coder", action: "edit", resources: ["src/index.js"], effect: "allow" };
+callbacks["permission:evaluate"](unsafeCoder);
+assert.equal(unsafeCoder.effect, "deny", "Unapproved coder edit must be rejected");
 assert.equal(typeof callbacks["tool:execute.before"], "function");
 
 const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "hulane-sdk-smoke-"));
