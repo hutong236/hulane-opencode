@@ -58,7 +58,7 @@ const expectedServer = {
   type: "local",
   command: [process.execPath, path.join(packageRoot, "hulane", "mcp", "server.mjs")],
   cwd: ".",
-  enabled: true
+  disabled: false
 };
 if (existingServers["hulane-control"] && !force && JSON.stringify(existingServers["hulane-control"]) !== JSON.stringify(expectedServer)) {
   throw new Error("Existing mcp.servers.hulane-control entry conflicts; use --force after review");
