@@ -13,6 +13,7 @@ import {
 import { createWorktree } from "../scripts/lib/worktree.mjs";
 import { issueAuthorization, issueReleaseAuthorization } from "../scripts/lib/authorization.mjs";
 import { validateDeliveryEvidence } from "../scripts/lib/delivery.mjs";
+import { verifyHumanApproval } from "../scripts/lib/human-approval.mjs";
 import { runPreflight } from "../scripts/lib/preflight.mjs";
 import { initializeTargetRepository } from "../scripts/lib/initializer.mjs";
 import { writeProjection } from "../scripts/lib/projection.mjs";
@@ -310,6 +311,15 @@ export function callTool(name, args = {}, context = {}) {
       throw new Error(`${args.event} is reserved for its dedicated MCP evidence tool`);
     }
     const item = getItem(root, args.id);
+    // Never trust agent-supplied "human:<identity>" strings. Require an actual,
+    // permission-checked GitHub Issue comment bound to the current revision.
+    if (["approve_requirement", "approve_merge", "approve_tag", "approve_skip"].includes(args.event) &&
+        !(args.event === "approve_requirement" && args.patch?.approval_source === "auto_intake")) {
+      verifyHumanApproval({
+        root, repository: repositoryFor(root, args.repository), item,
+        event: args.event, actor: args.actor, patch: args.patch ?? {},
+      });
+    }
     const next = applyEvent(item, args.event, { actor: args.actor, evidence: args.evidence, patch: args.patch ?? {}, to: args.to });
     return persist(root, next, { sync: args.sync !== false, repository: args.repository });
   }

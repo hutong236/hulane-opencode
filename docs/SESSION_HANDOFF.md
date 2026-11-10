@@ -157,6 +157,14 @@ npm test
 - Validation: 变更前本地正则无法匹配；修复后通过源码匹配检查，完整 CI 结果由本次 Actions 确认。
 - Next: 避免伪造的交付摘要和声明进入 verified 状态。
 
+### Step 14 — 人工 Gate A/B/C 从 GitHub 证据核验
+
+- Changed: `hulane/scripts/lib/human-approval.mjs`、`hulane/mcp/tools.mjs`、`test/human-approval.test.mjs`、三个 OpenCode 审批 Commands。
+- Security: 除低中风险 `auto_intake` 之外，人工事件均须同一 Work Item GitHub Issue 的精确 `HULANE_APPROVAL` 评论；由 GitHub 实际评论作者和 collaborator permission(write/maintain/admin)验证，且绑定当前 revision、Gate B PR Head、Gate C Tag。MCP 参数 `actor=human:xxx` 不再能直接自证人工批准。
+- Tradeoff: `pre_authorized` 也需先发布 GitHub Issue/评论才可手工批准；待补建的离线 Issue 不支持人工事件。此变更刻意 fail-closed。
+- Regression: 3 项角色、旧 revision、不同作者、过期评论、PR head/tag、API 真实查询调用测试。
+- Next: 评估真实 GitHub沙盒门禁（需要独立沙盒仓库与服务端 Rulesets 权限）。
+
 ## 6. 后续步骤追加模板
 
 ```markdown
