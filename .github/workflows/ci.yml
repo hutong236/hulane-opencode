@@ -20,3 +20,17 @@ jobs:
         run: npm run check:syntax
       - name: Core and regression tests
         run: npm test
+
+  opencode-v2-adapter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install V2 plugin dependency
+        run: npm install --no-audit --no-fund
+      - name: Show SDK version
+        run: npm ls @opencode/plugin --depth=0
+      - name: Test V2 native Plugin.define and hook registration
+        run: node --experimental-strip-types tests/sdk-smoke.mjs
