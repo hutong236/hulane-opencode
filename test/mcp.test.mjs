@@ -141,7 +141,7 @@ test("MCP server supports modern discovery and legacy initialization", () => {
   assert.ok(responses.find((response) => response.id === "discover").result.supportedVersions.includes("2026-07-28"));
   assert.equal(responses.find((response) => response.id === "modern-list").result.resultType, "complete");
   assert.equal(responses.find((response) => response.id === 1).result.protocolVersion, "2025-11-25");
-  assert.equal(responses.find((response) => response.id === 2).result.tools.length, 15);
+  assert.equal(responses.find((response) => response.id === 2).result.tools.length, 20);
   assert.equal(responses.find((response) => response.id === 3).result.isError, undefined);
   assert.equal(responses.find((response) => response.id === 4).result.structuredContent.valid, true);
   assert.ok(fs.existsSync(path.join(root, ".hulane", "state.json")));

@@ -4,6 +4,9 @@ description: OpenCode Hulane AI研发全生命周期技能：GitHub Issue、需�
 license: MIT
 ---
 
+**OpenCode V2 protected-operation override**: For a Work Item, use control-plane tools `hulane_secure_push`, `hulane_secure_merge`, `hulane_secure_tag_create`, `hulane_secure_tag_push`, and `hulane_secure_close` instead of issuing a token to a raw Bash command. Each secure tool revalidates live Work Item state, scope, and the exact PR/SHA/Tag target. Preserve the surrounding `hulane_transition` event/verification steps. If a secure tool is unavailable, STOP rather than bypass it through a shell. `/hulane_release` is a separate no-Work-Item release channel and retains its own explicit human authorization protocol.
+
+
 # Hulane OpenCode development (V2)
 
 **Mandatory adapter note**: This skill is ported from Hulane 3.10.0. Use the independent `hulane-control` MCP server for Work Item lifecycle. All evidence and Gates are authoritative in the MCP and GitHub, never in a prose-only assertion. OpenCode tools and hooks differ from ZCode: use the provided native Agents and Commands; never call deprecated ZCode hook or tool names.

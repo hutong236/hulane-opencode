@@ -5,6 +5,8 @@ import process from "node:process";
 import readline from "node:readline";
 import { fileURLToPath } from "node:url";
 import { TOOL_DEFINITIONS, callTool } from "./tools.mjs";
+import { SECURE_TOOL_DEFINITIONS, callSecureTool } from "./secure-tools.mjs";
+const ALL_TOOL_DEFINITIONS = [...TOOL_DEFINITIONS, ...SECURE_TOOL_DEFINITIONS];
 import { validateInput } from "./validate.mjs";
 
 const pluginRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -59,14 +61,17 @@ async function handle(message) {
     });
   }
   if (message.method === "ping") return success(message.id, {}, Boolean(requestedVersion));
-  if (message.method === "tools/list") return success(message.id, { resultType: "complete", tools: TOOL_DEFINITIONS, ttlMs: 300000, cacheScope: "private" }, Boolean(requestedVersion));
+  if (message.method === "tools/list") return success(message.id, { resultType: "complete", tools: ALL_TOOL_DEFINITIONS, ttlMs: 300000, cacheScope: "private" }, Boolean(requestedVersion));
   if (message.method === "tools/call") {
-    const definition = TOOL_DEFINITIONS.find((tool) => tool.name === message.params?.name);
+    const definition = ALL_TOOL_DEFINITIONS.find((tool) => tool.name === message.params?.name);
     if (!definition) return failure(message.id, -32602, `Unknown tool: ${message.params?.name ?? "<missing>"}`);
     const inputErrors = validateInput(definition.inputSchema, message.params?.arguments ?? {});
     if (inputErrors.length) return failure(message.id, -32602, `Invalid tool input: ${inputErrors.join("; ")}`);
     try {
-      const value = await callTool(message.params?.name, message.params?.arguments ?? {}, { cwd: process.cwd(), pluginRoot });
+      const options = { cwd: process.cwd(), pluginRoot };
+      const value = SECURE_TOOL_DEFINITIONS.some((tool) => tool.name === message.params?.name)
+        ? await callSecureTool(message.params?.name, message.params?.arguments ?? {}, options)
+        : await callTool(message.params?.name, message.params?.arguments ?? {}, options);
       return success(message.id, {
         resultType: "complete",
         content: [{ type: "text", text: JSON.stringify(value, null, 2) }],
