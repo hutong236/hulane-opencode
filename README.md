@@ -4,14 +4,15 @@
 
 ## 当前状态
 - ✅ 上游 Hulane 3.10.0 的状态机、GitHub Issue/PR 同步、离线工单、Worktree、OpenSpec、MCP、交付核验源码作为独立快照纳入本仓库。
-- ✅ 迁入上游 Node.js 回归测试；Node.js 20/22 均通过 156/156 项测试；真实 OpenCode CLI v2.2.7 已验证 8 Agent 发现和 MCP 连通（详见验收记录）。
+- ✅ 迁入上游 Node.js 回归测试；Node.js 20/22 通过持续回归；并新增 macOS Apple Silicon / Linux ARM64 的真实安装测试；真实 OpenCode CLI v2.2.7 已验证 8 Agent 发现和 MCP 连通（详见验收记录）。
 - 🧪 新 OpenCode V2 的 Commands、Agents、Skill、MCP 配置与插件安装器见 `opencode/` 和 `bin/install.mjs`，**已完成真实 CLI 的插件与 MCP 发现验证，尚未完成端到端研发流程及负向安全验收**。
 - ⚠️ 原 ZCode Hooks 保留作兼容/参考和回归测试，不会安装为 OpenCode Hooks；不能据此宣称强制权限门禁已验证。
-- ⚠️ OpenCode V2 SDK 尚在变化，已固定 `@opencode/plugin` 为 2.2.7，但仍需提交 lockfile 并完成完整版本验收；生产使用前须锁定并验证具体版本。
+- ✅ `@opencode/plugin` 和真实 CLI 已固定到 2.2.7，并提交 npm v3 锁文件，CI 使用 `npm ci`。
+- 🔐 增加跨进程状态写锁/修订号 CAS、人工 GitHub 审批证据核验、Gate B 检查全量验证、tag Release GHCR/Sigstore 独立证据验证代码；**以上安全能力仍需在真实 GitHub 沙盒进行完整负向验收**。
 
 ## 安装（开发环境）
 1. 使用 Node.js >=20，安装 OpenCode V2、Git、GitHub CLI 并完成 `gh auth login`。
-2. 克隆 **本仓库**并在仓库目录执行 `npm install`。运行 `npm test`。
+2. 克隆 **本仓库**并在仓库目录执行 `npm ci`。运行 `npm test`。
 3. 在目标业务仓库中执行：
    `node /path/to/hulane-opencode/bin/install.mjs --project /path/to/business-repo --dry-run`，确认变更后去掉 `--dry-run`。
 4. 进入业务仓库执行 `opencode mcp list`，验证 `hulane-control`，执行 `/hulane_check`。
@@ -31,6 +32,7 @@
 - [开发实施手册](docs/02-Hulane-OpenCode-开发实施手册.md)
 - [当前集成验收与未完成项](docs/03-OpenCode-集成验收与缺口.md)
 - [会话断点续作与逐步提交记录](docs/SESSION_HANDOFF.md)
+- [生产验收与外部权限待办（Issue #3）](https://github.com/hutong236/hulane-opencode/issues/3)
 
 开发协作必须遵循根目录 [AGENTS.md](AGENTS.md)：**每完成一个独立步骤，立即 commit + push；更新交接记录并核对 CI，不能等待整个 Web 会话结束才提交。**
 

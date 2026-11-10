@@ -6,7 +6,7 @@
 
 | 项目 | 结果 | 证据 |
 | --- | --- | --- |
-| Node.js 20/22 回归 | **156/156 通过** | [Actions 42848077086](https://github.com/hutong236/hulane-opencode/actions/runs/42848077086) |
+| Node.js 20/22 回归 | 基线 156/156 通过；后续已扩展回归集并持续运行 | [Actions 42848077086](https://github.com/hutong236/hulane-opencode/actions/runs/42848077086) |
 | OpenCode SDK | `@opencode/plugin` 2.2.7，`Plugin.define`/Shell/Tool/Permission Hook 加载和 Smoke 通过 | 同上 |
 | 实际 OpenCode CLI | v2.2.7，`hulane` 本地插件已加载 | 同上 |
 | Agent 发现 | 7 个子 Agent + `hulane-orchestrator` 8 个均可见 | CI `debug agents` 硬性断言 |
@@ -23,7 +23,7 @@
 git clone https://github.com/hutong236/hulane-opencode.git
 cd hulane-opencode
 git checkout feat/opencode-v2-initial-implementation
-npm install
+npm ci
 npm test
 node bin/install.mjs --project /path/to/business-repo --dry-run
 node bin/install.mjs --project /path/to/business-repo
@@ -49,6 +49,17 @@ opencode mcp list
 3. 子进程、包装器、重定向及用户直接从外部终端执行 Git 操作等绕行测试。GitHub 必需检查/Ruleset 必须独立配置；插件自身无法代替 GitHub 服务端权限。
 4. 在 Worktree 内的任意 Shell 命令仍可对其他绝对路径产生副作用，当前 Hook 不能证明沙盒级隔离；生产场景需 OS/容器权限或受限执行器。
 5. 高并发 Work Item / 多 OpenCode 进程同仓库写入冲突及锁崩溃恢复、重入幂等、GitHub 状态竞争验收。
-6. 提交 `package-lock.json`、固定 OpenCode CLI 版本、macOS ARM 和 Linux 安装升级/回滚验收。
+6. ✅ 已提交 `package-lock.json`，CI 改为 `npm ci`，固定 CLI v2.2.7，macOS M1 ARM64 / Linux ARM64 原生安装 Smoke 已通过；仍需要真实企业项目的安装升级/回滚验收。
 
 **结论：**已得到可安装、可通过真实 OpenCode v2.2.7 CLI 发现的开发验证版。此阶段保持 Draft PR，不直接发布生产版本或执行真实业务仓库的受保护操作。
+
+
+## 5. 2026-11-11 增量开发与真实生产验收边界
+
+- **依赖与平台**：CLI/plugin 固定 v2.2.7；npm v3 锁文件；CI `npm ci`；Apple Silicon macOS 与 Linux ARM64 原生安装 Smoke 通过。
+- **并发一致性**：状态写锁、修订号 CAS、Work Item 编号锁内原子分配、崩溃遗留锁的人工验证恢复。4 个独立 Node 进程同时创建 32 个工单的 CI 负向竞争回归已通过。
+- **控制权限**：安装器末尾强制全局 `hulane-control_*` deny；低中风险 auto_intake 之外的人工 Gate A/B/C 需要 GitHub Issue 真实作者评论与仓库写权限，不信任字符串 `human:xxx`；Gate B 要求所有必需检查通过且 PR 指向真实默认分支。
+- **Release 供应链**：工作流拒绝轻量 tag，校验远端 annotated tag 对象，针对 GHCR 镜像 digest 生成有签名的 SLSA/Spdx Artifact Attestations；`hulane_verify_delivery` 会独立查询 Actions、Release、Git Tag、GHCR digest 和 Sigstore 签名证明。新增模拟远端正/负测试及真实 MCP stdio 离线流程测试；截至本段更新，较新的提交仍有 GitHub Actions 排队，不能把它们描述为已验收。
+- **尚未解决/需仓库管理员协作**：GitHub Rulesets / Required Checks 真正服务端强制、独立沙盒内的真实 PR → Merge → Release → GHCR 全链路验收、OpenCode Agent Shell 级 OS 沙盒隔离、企业机器安装升级回滚。当前 GitHub 集成读取 `main` 分支保护返回 403，不能由本会话认证为生产安全。
+
+完整且可逐项勾选的生产验收清单：[#3 Production acceptance](https://github.com/hutong236/hulane-opencode/issues/3)。逐提交交接记录：[SESSION_HANDOFF](./SESSION_HANDOFF.md)。

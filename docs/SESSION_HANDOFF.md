@@ -196,6 +196,13 @@ npm test
 - Validation: 本次提交后的 CI 执行结果为准。
 - Next: 核查 CI、修复任何集成回归，并记录管理员权限/沙盒生产验收阻塞。
 
+### Step 19 — 与生产验收 Issue 对齐的最新文档
+
+- Changed: `README.md`、`docs/03-OpenCode-集成验收与缺口.md`、`opencode/README.md`、`docs/SESSION_HANDOFF.md`。
+- Canonical user-facing blocker and checklist: [Issue #3](https://github.com/hutong236/hulane-opencode/issues/3)。
+- Updated: 移除旧的“尚未 lockfile”描述，补充新安全控制、Apple Silicon / Linux ARM Smoke、真实 MCP stdio 与签名验证实现；对于还在排队的 CI 和缺少管理员权限的真实发布验收保持未完成状态。
+- Next: 等待最新六项 CI 完成，处理失败项并及时提交；如需外部管理员/独立沙盒，Issue #3 保持待办，不自动合并主分支。
+
 ## 6. 后续步骤追加模板
 
 ```markdown
