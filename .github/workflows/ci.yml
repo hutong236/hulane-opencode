@@ -66,6 +66,7 @@ jobs:
           echo "Config loaded from: $OPENCODE_CONFIG"
           cat "$OPENCODE_CONFIG"
           # Keep one real V2 server alive so initial async plugins/MCP can activate.
+          export OPENCODE_PASSWORD="$(openssl rand -hex 24)"
           opencode serve --hostname 127.0.0.1 --port 43987 > "$TEST_REPO/server.log" 2>&1 &
           SERVER_PID=$!
           trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
