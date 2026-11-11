@@ -1,0 +1,161 @@
+name: Hulane Build Image
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  packages: write
+  attestations: write
+  artifact-metadata: write
+  id-token: write
+
+concurrency:
+  group: hulane-image-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-and-push:
+    name: build-and-push
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate SemVer tag and default-branch ancestry
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "${GITHUB_REF_NAME}" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+            echo "Tag must be strict SemVer with a v prefix, for example v1.4.0 or v2.0.0-rc.1" >&2
+            exit 2
+          fi
+          default_branch="$(gh api "repos/${GITHUB_REPOSITORY}" --jq .default_branch)"
+          git fetch --no-tags origin "${default_branch}"
+          # Fail closed: a lightweight tag bypasses the intended Gate C
+          # annotated-tag lifecycle. Validate the object and its remote identity.
+          tag_ref="refs/tags/${GITHUB_REF_NAME}"
+          tag_type="$(git cat-file -t "${tag_ref}")"
+          if [[ "${tag_type}" != "tag" ]]; then
+            echo "Release requires a signed-off annotated tag object (Gate C), not a lightweight tag" >&2
+            exit 4
+          fi
+          local_tag_object="$(git rev-parse "${tag_ref}")"
+          remote_tag_object="$(git ls-remote --tags origin "${tag_ref}" | awk -v ref="${tag_ref}" '$2 == ref { print $1 }')"
+          if [[ -z "${remote_tag_object}" || "${remote_tag_object}" != "${local_tag_object}" ]]; then
+            echo "Remote tag object is missing or differs from the checked-out annotated tag" >&2
+            exit 5
+          fi
+          tag_sha="$(git rev-parse "${GITHUB_REF_NAME}^{commit}")"
+          if ! git merge-base --is-ancestor "${tag_sha}" "origin/${default_branch}"; then
+            echo "Tag commit ${tag_sha} is not contained in origin/${default_branch}" >&2
+            exit 3
+          fi
+          image_name="$(printf '%s' "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
+          echo "image_name=${image_name}" >> "${GITHUB_OUTPUT}"
+          echo "tag_sha=${tag_sha}" >> "${GITHUB_OUTPUT}"
+          echo "version=${GITHUB_REF_NAME#v}" >> "${GITHUB_OUTPUT}"
+      - name: Checkout validated commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.release.outputs.tag_sha }}
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ steps.release.outputs.image_name }}
+          tags: |
+            type=raw,value=${{ github.ref_name }}
+            type=semver,pattern={{version}},value=${{ github.ref_name }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ github.ref_name }}
+      - name: Build, attest, and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          sbom: true
+          provenance: mode=max
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      # Produce independently verifiable, Sigstore-signed GitHub artifact
+      # attestations bound to the immutable GHCR image digest.
+      - name: Generate image SPDX SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ steps.release.outputs.image_name }}@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          output-file: delivery-sbom.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Sign build provenance
+        uses: actions/attest@v4
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ steps.release.outputs.image_name }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+          create-storage-record: false
+      - name: Sign image SPDX SBOM
+        uses: actions/attest@v4
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ steps.release.outputs.image_name }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          sbom-path: delivery-sbom.spdx.json
+          push-to-registry: true
+          create-storage-record: false
+      - name: Write delivery metadata
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ steps.release.outputs.image_name }}
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          TAG_SHA: ${{ steps.release.outputs.tag_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -n \
+            --arg repository "${GITHUB_REPOSITORY}" \
+            --arg tag "${GITHUB_REF_NAME}" \
+            --arg commit_sha "${TAG_SHA}" \
+            --arg image "${IMAGE}" \
+            --arg image_digest "${IMAGE_DIGEST}" \
+            --arg workflow_run_url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --arg image_tags "${IMAGE_TAGS}" \
+            '{schema_version:1, repository:$repository, tag:$tag, commit_sha:$commit_sha, image:$image, image_tags:($image_tags | split("\n") | map(select(length > 0))), image_digest:$image_digest, workflow_run_url:$workflow_run_url, sbom:"generated", provenance:"generated"}' \
+            > delivery-metadata.json
+          jq -e '.image_digest | test("^sha256:[0-9a-f]{64}$")' delivery-metadata.json >/dev/null
+      - name: Upload delivery metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: hulane-delivery-${{ github.ref_name }}
+          path: delivery-metadata.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release create "${GITHUB_REF_NAME}" --verify-tag --generate-notes --title "${GITHUB_REF_NAME}"
+          fi
+          gh release upload "${GITHUB_REF_NAME}" delivery-metadata.json --clobber

@@ -1,0 +1,146 @@
+name: Hulane OpenCode CI
+on:
+  push:
+    branches: [main, "feat/**"]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  core-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: ['20', '22']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Syntax
+        run: npm run check:syntax
+      - name: Core and regression tests
+        run: npm test
+
+  opencode-v2-adapter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install V2 plugin dependency
+        run: npm ci --no-audit --no-fund
+      - name: Show SDK version
+        run: npm ls @opencode/plugin --depth=0
+      - name: Test V2 native Plugin.define and hook registration
+        run: node --experimental-strip-types tests/sdk-smoke.mjs
+
+  opencode-cli-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install plugin dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Install real OpenCode V2 CLI
+        run: npm install -g @opencode/cli@2.2.7
+      - name: Verify executable and version
+        run: |
+          ACTUAL="$(opencode --version | tr -d '\r\n')"
+          echo "OpenCode CLI version: $ACTUAL"
+          test "$ACTUAL" = "opencode v2.2.7"
+      - name: Install into isolated project and validate startup
+        shell: bash
+        run: |
+          set -euo pipefail
+          TEST_REPO="$(mktemp -d)"
+          git -C "$TEST_REPO" init -q
+          git -C "$TEST_REPO" config user.name "OpenCode CI"
+          git -C "$TEST_REPO" config user.email "opencode-ci@example.invalid"
+          echo "temporary target project" > "$TEST_REPO/README.md"
+          git -C "$TEST_REPO" add README.md
+          git -C "$TEST_REPO" commit -qm initial
+          node bin/install.mjs --project "$TEST_REPO"
+          cd "$TEST_REPO"
+          export OPENCODE_CONFIG="$TEST_REPO/opencode.json"
+          echo "Config loaded from: $OPENCODE_CONFIG"
+          cat "$OPENCODE_CONFIG"
+          # Keep one real V2 server alive so initial async plugins/MCP can activate.
+          export OPENCODE_PASSWORD="$(openssl rand -hex 24)"
+          opencode serve --hostname 127.0.0.1 --port 43987 > "$TEST_REPO/server.log" 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          for retry in {1..20}; do
+            if curl --silent --fail http://127.0.0.1:43987/global/health >/dev/null; then break; fi
+            sleep 0.5
+          done
+          opencode --server http://127.0.0.1:43987 debug config | tee "$TEST_REPO/effective-config.txt"
+          opencode --server http://127.0.0.1:43987 debug agents > "$TEST_REPO/agent-list.json"
+          node - "$TEST_REPO/agent-list.json" <<'NODE'
+          const fs = require("node:fs");
+          const agents = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          const ids = new Set(agents.map(agent => agent.id));
+          for (const name of [
+            "hulane-orchestrator", "hulane-planner", "hulane-coder",
+            "hulane-designer", "hulane-design-critic", "hulane-tester",
+            "hulane-reviewer", "hulane-build-checker"
+          ]) {
+            if (!ids.has(name)) throw new Error("Missing OpenCode agent: " + name);
+          }
+          console.log("Verified 8 Hulane agents");
+          NODE
+          opencode --server http://127.0.0.1:43987 plugin list --builtin | tee "$TEST_REPO/plugin-list.txt"
+          grep -i 'opencode.config.mcp' "$TEST_REPO/plugin-list.txt"
+          grep -i 'hulane' "$TEST_REPO/plugin-list.txt"
+          opencode --server http://127.0.0.1:43987 mcp list | tee "$TEST_REPO/mcp-list.txt"
+          grep -E 'hulane-control[[:space:]]+connected' "$TEST_REPO/mcp-list.txt"
+
+  platform-install-smoke:
+    # macos-15 = Apple Silicon M1 arm64; ubuntu-24.04-arm = Linux aarch64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, ubuntu-24.04-arm]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify native ARM architecture
+        run: |
+          uname -a
+          test "$(node -p 'process.arch')" = arm64
+      - name: Restore locked dependency graph
+        run: npm ci --no-audit --no-fund
+      - name: Smoke OpenCode V2 plugin on ARM
+        run: node --experimental-strip-types tests/sdk-smoke.mjs
+      - name: Install pinned real CLI
+        run: |
+          npm install -g @opencode/cli@2.2.7
+          test "$(opencode --version | tr -d '\r\n')" = 'opencode v2.2.7'
+      - name: Install Hulane into a disposable Git project
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET="$(mktemp -d)"
+          git -C "$TARGET" init -q
+          git -C "$TARGET" config user.name 'Hulane CI'
+          git -C "$TARGET" config user.email 'hulane-ci@example.invalid'
+          echo smoke > "$TARGET/README.md"
+          git -C "$TARGET" add README.md
+          git -C "$TARGET" commit -qm initial
+          node bin/install.mjs --project "$TARGET" --dry-run
+          node bin/install.mjs --project "$TARGET"
+          test -f "$TARGET/opencode.json"
+          test -f "$TARGET/.opencode/agents/hulane-orchestrator.md"
+          node - "$TARGET/opencode.json" <<'NODE'
+          const fs = require('node:fs');
+          const cfg = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          if (!cfg.mcp?.servers?.['hulane-control']) throw new Error('Missing Hulane MCP');
+          console.log('ARM64 native project install and MCP config validated');
+          NODE

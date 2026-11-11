@@ -1,0 +1,10 @@
+node_modules/
+.hulane/
+.cmdb-dev/
+plan/
+.env
+.env.*
+!.env.example
+*.log
+coverage/
+.DS_Store

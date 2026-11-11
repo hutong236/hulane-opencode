@@ -1,0 +1,13 @@
+---
+description: "显式批准高风险的 Hulane PR 合并（Gate B），然后停在人工 tag/镜像确认关口。"
+agent: hulane-orchestrator
+---
+
+**OpenCode V2 protected-operation override**: For a Work Item, use control-plane tools `hulane_secure_push`, `hulane_secure_merge`, `hulane_secure_tag_create`, `hulane_secure_tag_push`, and `hulane_secure_close` instead of issuing a token to a raw Bash command. Each secure tool revalidates live Work Item state, scope, and the exact PR/SHA/Tag target. Preserve the surrounding `hulane_transition` event/verification steps. If a secure tool is unavailable, STOP rather than bypass it through a shell. `/hulane_release` is a separate no-Work-Item release channel and retains its own explicit human authorization protocol.
+
+
+First load the `hulane-development` skill. This is the OpenCode V2 port: use the `hulane-control` MCP tools as the sole source of authority for lifecycle transitions; never fabricate evidence. For legacy Bash steps, obey the OpenCode V2 plugin shell guard and the exact worktree restrictions. Do not claim Done unless the control plane verifies it.
+
+The user explicitly authorizes merge for $ARGUMENTS. This command covers high-risk merges under either merge guard. Call `hulane_status` with GitHub refresh when resuming across sessions or when local state is stale or suspect (a `hulane_verify_pr_checks` performed in this session is revision-guarded and fresh), and verify waiting_human_merge, passed Tester/Reviewer/workflow checks, persisted `pr_head_sha`, a verified merge guard, and no blocker. Call `hulane_transition(approve_merge, actor=human:<identity>)` to persist Gate B; approval never bypasses checks. Perform exactly one repository-compatible merge command that includes `--match-head-commit <persisted-pr-head-sha>` — no token is needed, the guard state-verifies merges from the `merging` state. Verify merged SHA, call `hulane_transition(pr_merged)` with that SHA, then split by the persisted delivery policy: when delivery_required is false and skip_allowed is true, record `policy_skip` citing the Gate A approval, close the exact Issue once (state-verified, no token), record issue_closed, housekeep the merged worktree — plain `git worktree remove <worktree_path>` (never `--force`) then `git branch -d <branch>` from the managed repository — and report Done; otherwise STOP at waiting_tag_confirm. Never invoke the legacy state CLI.
+
+**GitHub 审批证据（强制）**：人工审批前，拥有目标仓库 write/maintain/admin 权限的 GitHub 用户必须先在本 Work Item 对应的 GitHub Issue 上发表完全一致的评论 `HULANE_APPROVAL approve_merge <WorkItemID> revision=<当前revision> head=<当前40位PR Head SHA>`。Orchestrator 用 `human:<该评论作者GitHub登录名>` 调用状态转换；服务端主动读取 Issue 评论和仓库 collaborator permission，缺少真实证据必须停止。

@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/hutong236/hutong-zcode-marketplace/hulane/schemas/work-item-state.schema.json",
+  "title": "hulane Work Item State",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "id",
+    "issue_number",
+    "title",
+    "status",
+    "risk_level",
+    "delivery_required",
+    "skip_allowed",
+    "human_approval",
+    "issue_state",
+    "rework_count",
+    "rework_limit",
+    "merge_guard_mode",
+    "required_checks_enforced",
+    "legacy_completion",
+    "registry_verified",
+    "sbom_status",
+    "provenance_status",
+    "sbom_digest",
+    "provenance_digest",
+    "revision",
+    "history"
+  ],
+  "properties": {
+    "schema_version": { "const": 2 },
+    "id": { "pattern": "^(REQ|BUG)-[1-9][0-9]*$" },
+    "issue_pending": { "type": "boolean" },
+    "issue_number": { "type": ["integer", "null"], "minimum": 1 },
+    "planner_summary": { "type": ["string", "null"] },
+    "acceptance_criteria": { "type": "array", "items": { "type": "string" } },
+    "github_issue_url": { "type": ["string", "null"], "pattern": "^https://github\\.com/" },
+    "title": { "type": "string", "minLength": 1 },
+    "status": {
+      "enum": [
+        "waiting_approval", "ready", "planning", "doing", "testing", "review",
+        "pr_open", "pr_checking", "waiting_human_merge", "merging",
+        "waiting_tag_confirm", "building", "waiting_close", "blocked", "done"
+      ]
+    },
+    "risk_level": { "enum": ["low", "medium", "high"] },
+    "size": { "enum": ["standard", "small"], "default": "standard" },
+    "delivery_required": { "type": "boolean" },
+    "delivery_reason": { "type": "string" },
+    "skip_allowed": { "type": "boolean" },
+    "human_approval": { "enum": ["required", "approved"] },
+    "approval_source": { "enum": ["issue_stop", "pre_authorized", "auto_intake"] },
+    "issue_state": { "enum": ["open", "closed"] },
+    "pr_number": { "type": ["integer", "null"], "minimum": 1 },
+    "pr_head_sha": { "type": ["string", "null"], "pattern": "^[0-9a-fA-F]{40}$" },
+    "pr_check_name": { "type": ["string", "null"] },
+    "pr_check_run_url": { "type": ["string", "null"], "pattern": "^https://github\\.com/" },
+    "merge_guard_mode": { "enum": ["unverified", "github_required_checks", "control_plane_verified"] },
+    "required_checks_enforced": { "type": "boolean" },
+    "legacy_completion": { "type": "boolean" },
+    "spec_sync_required": { "type": "boolean" },
+    "specs_synced": { "type": "boolean" },
+    "specs_commit_sha": { "type": ["string", "null"], "pattern": "^[0-9a-fA-F]{40}$" },
+    "spec_delta_dir": { "type": ["string", "null"] },
+    "worktree_path": { "type": ["string", "null"] },
+    "rework_count": { "type": "integer", "minimum": 0, "maximum": 4 },
+    "rework_limit": { "const": 3 },
+    "merged_sha": { "type": ["string", "null"], "pattern": "^[0-9a-fA-F]{40}$" },
+    "image_digest": { "type": ["string", "null"], "pattern": "^sha256:[0-9a-fA-F]{64}$" },
+    "registry_verified": { "type": "boolean" },
+    "release_url": { "type": ["string", "null"] },
+    "sbom_status": { "enum": ["unknown", "verified"] },
+    "provenance_status": { "enum": ["unknown", "verified"] },
+    "sbom_digest": { "type": ["string", "null"], "pattern": "^sha256:[0-9a-fA-F]{64}$" },
+    "provenance_digest": { "type": ["string", "null"], "pattern": "^sha256:[0-9a-fA-F]{64}$" },
+    "revision": { "type": "integer", "minimum": 1 },
+    "history": { "type": "array", "maxItems": 100 }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "delivery_required": { "const": true } } },
+      "then": { "properties": { "skip_allowed": { "const": false } } }
+    },
+    {
+      "if": { "properties": { "issue_pending": { "const": true } }, "required": ["issue_pending"] },
+      "then": {
+        "properties": {
+          "issue_number": { "type": "null" },
+          "github_issue_url": { "type": "null" },
+          "issue_state": { "const": "open" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "issue_pending": { "const": false } }, "required": ["issue_pending"] },
+      "then": { "properties": { "issue_number": { "type": "integer", "minimum": 1 } } }
+    }
+  ],
+  "additionalProperties": true
+}
