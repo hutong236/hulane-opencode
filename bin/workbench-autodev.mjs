@@ -102,6 +102,8 @@ export function validatePaths(paths) {
   if (paths.length>30) throw new Error('More than 30 changed files: manual review required');
   for (const path of paths) {
     if (!(path.startsWith('workbench/')||path==='docs/SESSION_HANDOFF.md')) throw new Error(`Denied edit: ${path}`);
+    if (/(?:^|\/)\.env(?:\.|$)|\.(?:pem|key|p12|pfx)$|(?:secret|credential|private.?key)/i.test(path))
+      throw new Error(`Secret-like file path is not permitted: ${path}`);
     if (existsSync(path)&&lstatSync(path).isSymbolicLink()) throw new Error(`Symlink edit denied: ${path}`);
   }
   return true;

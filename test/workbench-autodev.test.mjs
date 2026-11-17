@@ -33,5 +33,7 @@ test('does not modify fork PR or privileged file paths',()=>{
   assert.equal(validatePaths(['workbench/apps/web/src/App.tsx','docs/SESSION_HANDOFF.md']),true);
   assert.throws(()=>validatePaths(['hulane/mcp/server.mjs']),/Denied edit/);
   assert.throws(()=>validatePaths(['.github/workflows/ci.yml']),/Denied edit/);
+  assert.throws(()=>validatePaths(['workbench/.env.local']),/Secret-like/);
+  assert.throws(()=>validatePaths(['workbench/secret.pem']),/Secret-like/);
   assert.throws(()=>validatePaths(Array.from({length:31},(_,i)=>`workbench/file${i}`)),/30/);
 });

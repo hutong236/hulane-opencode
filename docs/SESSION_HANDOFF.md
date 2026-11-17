@@ -225,3 +225,13 @@ npm test
 ```
 
 **故障回退规则**：提交/推送后如无法确认成功，首先检查远端 SHA；CI 失败保留失败记录并立即以单独修复提交推进。未推送的工作不算完成，禁止无意覆盖别人推送的更新。
+
+
+### Workbench autonomous scheduler (2026-11-18)
+
+- Branch: `feat/workbench-autodev-30m`; Draft [PR #35](https://github.com/hutong236/hulane-opencode/pull/35).
+- Scope: deterministic dependency-aware selection of WB-001..WB-028; prefer red CI, block pending CI and green PRs awaiting human review; GitHub Actions every 30 minutes will run pinned OpenCode V2.2.7 with no GitHub write credentials and a strict workbench edit allowlist; a separate scoped publish step pushes a Draft PR.
+- Credential prerequisites: `WORKBENCH_AUTODEV_MODEL` variable plus matching provider secret and `WORKBENCH_AUTODEV_TOKEN`; missing config produces BLOCKED, not a claimed task success.
+- Checks: Node 20 and Node 22 core suites passed in [PR run 44152746154](https://github.com/hutong236/hulane-opencode/actions/runs/44152746154); macOS ARM job was still in progress at last review, **full CI not yet certified**. Final security guard also refuses secret-like file names and symlinks.
+- Safety: No PR auto-merge, no Issue auto-close, no production Gate bypass. Needs real GitHub Actions scheduled run validation once merged to main; Issue #3 remains open.
+- Next: validate full CI on exact final SHA; review+merge PR #35; configure secrets and model variable; dispatch one manual smoke run before relying on cron.
