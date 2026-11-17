@@ -260,3 +260,13 @@ npm test
 - Validation: test is designed for existing root `npm test` on Node 20/22; **not locally executed** in this connector-only execution. Exact post-push Actions must determine pass/fail. Previous [Hulane CI 44153651055](https://github.com/hutong236/hulane-opencode/actions/runs/44153651055) had core Node20/22 success and one cancelled macOS ARM job; [Workbench CI 44153651029](https://github.com/hutong236/hulane-opencode/actions/runs/44153651029) succeeded.
 - Risk: cancellation is not evidence of a failing test; do not mark the full Hulane matrix green. No real OpenCode CLI executed in this step.
 - Next: inspect the new commit's full CI matrix, diagnose any actual failed job, and finish WB-001 review; keep Issue #5 open until verified acceptance and Issue #3 open for production gates.
+
+### WB-001 — Negative API route regression (2026-11-17)
+
+- Task / acceptance: GET /api/does-not-exist must return HTTP 404 and must not report status=ok; GET /api/health remains covered by existing positive test.
+- Branch: `feat/WB-001-workbench-bootstrap`; Draft PR #33; parent `b0a45e415c03f752d8cd7261020e4b22746579b2`.
+- Files: `workbench/apps/api/test/health.spec.ts`, `docs/SESSION_HANDOFF.md`.
+- Validation: connector-only change; local npm tests **not run**. Previous exact-parent Workbench CI [44172729271](https://github.com/hutong236/hulane-opencode/actions/runs/44172729271) succeeded; Hulane CI [44172728998](https://github.com/hutong236/hulane-opencode/actions/runs/44172728998) marked failure solely with macOS ARM job cancelled, five other jobs succeeded. New SHA CI is pending verification; no real OpenCode CLI run here.
+- Concurrency: 100 latest Actions runs showed no queued/in-progress jobs at pre-write check; PR #33 head matched parent. GitHub auto-coding workflow in PR #35 is not merged into main.
+- Risk: API negative path test not yet verified by runner; full Hulane matrix not green. Issue #5 and production Issue #3 remain open.
+- Next: inspect new CI for this commit; investigate macOS ARM cancellation if reproducible, then add lint command and finish WB-001 acceptance.

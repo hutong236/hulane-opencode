@@ -12,3 +12,14 @@ test('GET /api/health returns a real healthy status', async () => {
     await app.close();
   }
 });
+
+test('unknown API routes do not report healthy status', async () => {
+  const app = buildApp();
+  try {
+    const response = await app.inject({ method: 'GET', url: '/api/does-not-exist' });
+    assert.equal(response.statusCode, 404);
+    assert.notEqual(response.json().status, 'ok');
+  } finally {
+    await app.close();
+  }
+});
