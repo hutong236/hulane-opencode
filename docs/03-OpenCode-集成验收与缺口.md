@@ -1,6 +1,6 @@
 # Hulane OpenCode V2 集成验收记录（开发验证版）
 
-> 当前版本：0.1.0（开发验证），2026-11-10。分支：`feat/opencode-v2-initial-implementation`；[Draft PR #1](https://github.com/hutong236/hulane-opencode/pull/1)。不代表生产验收。
+> 当前版本：0.1.0（开发验证）。截至 2026-11-17，已通过 [PR #1](https://github.com/hutong236/hulane-opencode/pull/1) 合并到 `main`（`db2815a2a694d5447d8ef61fc1148fa416446a09`）；[合并后 CI 42936837021](https://github.com/hutong236/hulane-opencode/actions/runs/42936837021) 6/6 成功。**这不是生产验收或正式发布。**
 
 ## 1. 验证过的事实
 
@@ -22,7 +22,7 @@
 ```bash
 git clone https://github.com/hutong236/hulane-opencode.git
 cd hulane-opencode
-git checkout feat/opencode-v2-initial-implementation
+git checkout main
 npm ci
 npm test
 node bin/install.mjs --project /path/to/business-repo --dry-run
@@ -51,7 +51,7 @@ opencode mcp list
 5. 高并发 Work Item / 多 OpenCode 进程同仓库写入冲突及锁崩溃恢复、重入幂等、GitHub 状态竞争验收。
 6. ✅ 已提交 `package-lock.json`，CI 改为 `npm ci`，固定 CLI v2.2.7，macOS M1 ARM64 / Linux ARM64 原生安装 Smoke 已通过；仍需要真实企业项目的安装升级/回滚验收。
 
-**结论：**已得到可安装、可通过真实 OpenCode v2.2.7 CLI 发现的开发验证版。此阶段保持 Draft PR，不直接发布生产版本或执行真实业务仓库的受保护操作。
+**结论：**已得到可安装、可通过真实 OpenCode v2.2.7 CLI 发现的开发验证版，且开发基线已合入 `main`。**尚未完成真实业务端到端安全验收，不能以合并行为替代生产放行，也不应执行生产受保护操作。**
 
 
 ## 5. 2026-11-11 增量开发与真实生产验收边界
@@ -63,3 +63,9 @@ opencode mcp list
 - **尚未解决/需仓库管理员协作**：GitHub Rulesets / Required Checks 真正服务端强制、独立沙盒内的真实 PR → Merge → Release → GHCR 全链路验收、OpenCode Agent Shell 级 OS 沙盒隔离、企业机器安装升级回滚。当前 GitHub 集成读取 `main` 分支保护返回 403，不能由本会话认证为生产安全。
 
 完整且可逐项勾选的生产验收清单：[#3 Production acceptance](https://github.com/hutong236/hulane-opencode/issues/3)。逐提交交接记录：[SESSION_HANDOFF](./SESSION_HANDOFF.md)。
+
+## 6. 2026-11-17 合并后复核
+
+- [main Actions run 42936837021](https://github.com/hutong236/hulane-opencode/actions/runs/42936837021) 6/6 succeeded，SHA `db2815a2a694d5447d8ef61fc1148fa416446a09`。
+- GitHub `GET /branches/main` 明确报告 `protected:false`、required status check enforcement `off`；管理员需开启本仓库的实际 CI 必需检查保护，另对业务沙盒启用 `Hulane PR Checks / verify`。
+- [Issue #3](https://github.com/hutong236/hulane-opencode/issues/3) 为后续真实验收权威清单。未提供专用私有 sandbox，因此 Gate A/B/C、GHCR Sigstore 和恶意 Shell 隔离仍不合格、不放行正式 Release。
