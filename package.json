@@ -14,7 +14,7 @@
     "hulane-opencode-install": "./bin/install.mjs"
   },
   "scripts": {
-    "test": "node --test",
+    "test": "node --test test/*.test.mjs",
     "test:core": "node --test test/*.test.mjs",
     "check:syntax": "node --check bin/install.mjs && node --check hulane/mcp/server.mjs && node --check hulane/scripts/lib/state-machine.mjs",
     "check": "npm run check:syntax && npm test"

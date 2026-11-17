@@ -235,3 +235,10 @@ npm test
 - Fix: use `message`, rename test to `.spec.ts`, run it with `tsx --test`, enable TS extension import only for no-emit test config. Pending fresh CI verification. Keep PR Draft and do not claim WB-001 complete.
 - Next: generate reproducible workbench/package-lock.json; use `npm ci` in workbench CI; implement lint/browser Smoke and run acceptance. GitHub runner may be used because current local container cannot resolve npm Registry (EAI_AGAIN).
 - Separately, a read-only 30-minute delivery monitor is proposed by PR [#34](https://github.com/hutong236/hulane-opencode/pull/34); it will not run on schedule until merged into main.
+
+
+### WB-001 — Fix root test isolation (2026-11-18)
+
+- Failure confirmed: existing [Hulane CI run 44138113271](https://github.com/hutong236/hulane-opencode/actions/runs/44138113271) collected `workbench/apps/api/test/health.spec.ts` under root `node --test`, but root install has no Fastify; 181/182 tests passed before collection failure. It is not a regression of Hulane core assertions.
+- Fix root `npm test` to explicitly run `test/*.test.mjs` for the pre-existing core test suite; Workbench tests remain in independent `workbench/ npm test`. New CI must confirm both, and no test is silently dropped from the core suite.
+- Next: recheck exact branch SHA, root CI and Workbench CI. Review PR #33, keep #3 untouched.
