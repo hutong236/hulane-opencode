@@ -11,7 +11,7 @@
 - **main 分支规则:** GitHub `GET /branches/main` 于 2026-11-17 返回 `protected:false` / required contexts empty；**主线尚无服务器强制保护**。GitHub 连接权限不包含仓库管理/Ruleset 写入能力。
 - **未完成生产验收:** [Issue #3](https://github.com/hutong236/hulane-opencode/issues/3) 仍开放；需要 owner/admin 提供独立私有 sandbox、按实际 check context 配置 Ruleset，完成真实 REQ/BUG-Gate A/B/C-PR-GHCR-Sigstore E2E、Shell OS 隔离、跨会话恢复与实机回滚。
 - **当前工作分支:** `chore/post-merge-acceptance-20261117`（从上述 main HEAD 派生），用于修正交接规范并补全后续验收材料；每步提交并核实远端。
-- **下一独立任务:** 提供可执行的真实沙盒管理员验收清单，并在获得实际 sandbox 管理权限后逐项运行。**没有服务端分支保护和真实安全测试不得宣称生产就绪**。
+- **验收执行手册:** [04 真实 GitHub 沙盒验收手册](./04-真实GitHub沙盒验收手册.md)；**下一独立任务:** 获取管理员配置的独立测试仓库并运行真实服务端检查/负向场景。**没有服务端分支保护和真实安全测试不得宣称生产就绪**。
 
 ## 1. 持久化入口
 

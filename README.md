@@ -33,6 +33,7 @@
 - [当前集成验收与未完成项](docs/03-OpenCode-集成验收与缺口.md)
 - [会话断点续作与逐步提交记录](docs/SESSION_HANDOFF.md)
 - [生产验收与外部权限待办（Issue #3）](https://github.com/hutong236/hulane-opencode/issues/3)
+- [真实 GitHub 沙盒验收手册（管理员步骤与负向测试）](docs/04-真实GitHub沙盒验收手册.md)
 
 开发协作必须遵循根目录 [AGENTS.md](AGENTS.md)：**每完成一个独立步骤，立即 commit + push；更新交接记录并核对 CI，不能等待整个 Web 会话结束才提交。**
 
