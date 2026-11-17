@@ -7,7 +7,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --import tsx --test test/*.test.ts"
+    "test": "tsx --test test/*.spec.ts"
   },
   "dependencies": {
     "fastify": "5.3.2"

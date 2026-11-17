@@ -225,3 +225,13 @@ npm test
 ```
 
 **故障回退规则**：提交/推送后如无法确认成功，首先检查远端 SHA；CI 失败保留失败记录并立即以单独修复提交推进。未推送的工作不算完成，禁止无意覆盖别人推送的更新。
+
+
+## Workbench Web UI kickoff — WB-001 (2026-11-18)
+
+- Branch: `feat/WB-001-workbench-bootstrap`, PR [#33](https://github.com/hutong236/hulane-opencode/pull/33) (Draft), Issue [#5](https://github.com/hutong236/hulane-opencode/issues/5).
+- Initial checkpoint: `a644f4507a7574f0d28e1a309f872d8aa1b5dab6` (27 files under workbench/ plus dedicated CI); React/Ant Design shell, local Fastify health endpoint, Worker/adapter boundaries.
+- Evidence: [Workbench CI 44136603060](https://github.com/hutong236/hulane-opencode/actions/runs/44136603060) failed Typecheck (AntD Alert uses `message`, not `title`); root CI 44136524819 failed because `node --test` discovered new TypeScript `.test.ts` file. Root/main baseline remains unchanged.
+- Fix: use `message`, rename test to `.spec.ts`, run it with `tsx --test`, enable TS extension import only for no-emit test config. Pending fresh CI verification. Keep PR Draft and do not claim WB-001 complete.
+- Next: generate reproducible workbench/package-lock.json; use `npm ci` in workbench CI; implement lint/browser Smoke and run acceptance. GitHub runner may be used because current local container cannot resolve npm Registry (EAI_AGAIN).
+- Separately, a read-only 30-minute delivery monitor is proposed by PR [#34](https://github.com/hutong236/hulane-opencode/pull/34); it will not run on schedule until merged into main.
