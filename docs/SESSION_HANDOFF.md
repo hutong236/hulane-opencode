@@ -251,3 +251,12 @@ npm test
 - Failure confirmed: existing [Hulane CI run 44138113271](https://github.com/hutong236/hulane-opencode/actions/runs/44138113271) collected `workbench/apps/api/test/health.spec.ts` under root `node --test`, but root install has no Fastify; 181/182 tests passed before collection failure. It is not a regression of Hulane core assertions.
 - Fix root `npm test` to explicitly run `test/*.test.mjs` for the pre-existing core test suite; Workbench tests remain in independent `workbench/ npm test`. New CI must confirm both, and no test is silently dropped from the core suite.
 - Next: recheck exact branch SHA, root CI and Workbench CI. Review PR #33, keep #3 untouched.
+
+### WB-001 — Root test discovery regression guard (2026-11-17)
+
+- Task: add a Node built-in regression test enforcing explicit root test glob and independent Workbench test command, preventing accidental Fastify-dependent `.spec.ts` discovery by the root CI.
+- Branch: `feat/WB-001-workbench-bootstrap`; PR #33; parent `11dc8ed32b7a544623cb6460c5f682f8aeddf4f3`.
+- Files: `test/workbench-test-isolation.test.mjs`, `docs/SESSION_HANDOFF.md`.
+- Validation: test is designed for existing root `npm test` on Node 20/22; **not locally executed** in this connector-only execution. Exact post-push Actions must determine pass/fail. Previous [Hulane CI 44153651055](https://github.com/hutong236/hulane-opencode/actions/runs/44153651055) had core Node20/22 success and one cancelled macOS ARM job; [Workbench CI 44153651029](https://github.com/hutong236/hulane-opencode/actions/runs/44153651029) succeeded.
+- Risk: cancellation is not evidence of a failing test; do not mark the full Hulane matrix green. No real OpenCode CLI executed in this step.
+- Next: inspect the new commit's full CI matrix, diagnose any actual failed job, and finish WB-001 review; keep Issue #5 open until verified acceptance and Issue #3 open for production gates.
