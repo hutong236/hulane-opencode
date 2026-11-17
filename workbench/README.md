@@ -4,7 +4,7 @@ Development scaffold for [WB-001](https://github.com/hutong236/hulane-opencode/i
 
 ## Requirements
 
-Node.js >= 20. A local npm registry connection is required for initial dependency installation. A reproducible `package-lock.json` and `npm ci` are still outstanding for WB-001; do not claim its acceptance checklist is complete until that is committed and verified.
+Node.js >= 20. Use the committed `package-lock.json` with `npm ci` for reproducible installs. This scaffold still requires an npm Registry connection when the packages are not cached.
 
 ## Run (development)
 
