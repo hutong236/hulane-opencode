@@ -25,6 +25,13 @@ jobs:
       - name: Install (temporary bootstrap; lockfile pending)
         working-directory: workbench
         run: npm install --no-audit --no-fund
+      - name: Publish generated lockfile for reproducible bootstrap
+        working-directory: workbench
+        shell: bash
+        run: |
+          printf 'WB_LOCK_BEGIN_20261118\\n'
+          base64 -w0 package-lock.json
+          printf '\\nWB_LOCK_END_20261118\\n'
       - name: Typecheck
         working-directory: workbench
         run: npm run typecheck
