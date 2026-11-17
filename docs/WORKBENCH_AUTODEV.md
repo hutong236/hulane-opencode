@@ -1,0 +1,27 @@
+# Scheduled OpenCode issue implementation
+
+This is an **implementation** runner, not only the read-only progress monitor. It runs every half-hour under `.github/workflows/workbench-autodev.yml` after merging into the default branch. GitHub can delay scheduled events.
+
+Each run reads all WB-001 through WB-028 Issues and dependencies, prioritizes repair of red CI, selects one dependency-ready item, runs pinned OpenCode V2.2.7, checks generated edits, runs tests, then pushes a feature branch and creates or updates a **Draft PR**. Green PRs wait for human review; no automatic merge, closure or production release occurs.
+
+## GitHub owner setup
+
+Repository Settings -> Secrets and variables -> Actions:
+
+- **Variable** `WORKBENCH_AUTODEV_MODEL`: exact OpenCode `provider/model` identifier.
+- **Secret** `WORKBENCH_OPENAI_API_KEY` **or** `WORKBENCH_ANTHROPIC_API_KEY`: API credential for that model.
+- **Secret** `WORKBENCH_AUTODEV_TOKEN`: fine-grained repository PAT or GitHub App token with Contents Read/Write and Pull Requests Read/Write. Use a dedicated identity, NOT any production credentials. Unlike the built-in GITHUB_TOKEN, a separate app/PAT token can trigger the normal CI workflows after push/PR events.
+
+Until configured, the run reports **BLOCKED** and makes no model call or GitHub write. Provider billing may apply once activated; set spending limits.
+
+## Safety, caveats and handoff
+
+- Model step receives no GitHub write token. Its OpenCode permissions deny shell and allow edits only in `workbench/` and `docs/SESSION_HANDOFF.md`; edits are checked again before publication.
+- The model does **not** run tests. Tests run in a separate step with no provider or GitHub write secrets; the results are recorded rather than fabricated.
+- The publishing token is provided only in the final push/PR step. The workflow is serialized across scheduled runs and disallows modifying Hulane core, CI workflows and privileged release paths.
+- A model API key is still exposed to the model execution process. This is a defense-in-depth design, not OS-level isolation or production security certification. See production acceptance Issue #3.
+- Some Issues require core or workflow changes outside the allowlist. Those must be implemented via separately reviewed PRs. Human review/merge unlocks dependent Issues.
+- The read-only `.github/workflows/workbench-progress.yml` remains enabled alongside the implementation runner.
+- Selector verification: `node --test test/workbench-autodev.test.mjs`. No workflow is production-approved merely because this unit test passes.
+
+In each run, see the GitHub Actions Job Summary for the selected task, blocked dependencies, test result and PR SHA.
