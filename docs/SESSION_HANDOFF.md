@@ -319,3 +319,10 @@ npm test
 - Earlier HEAD `0c0a35a5c5bc87bb29aa6d42655631cdde450068`: Workbench CI 44230432635 (2/2 passed), Hulane CI 44230432632 (6/6 passed).
 - Added pinned Playwright Chromium and tests for six browser routes, reload, HTTP 500 retry, mobile Drawer and local theme persistence.
 - Temporarily run npm install to export exact lockfile. This checkpoint's CI remains pending. Next: commit lockfile, restore npm ci, verify browsers and regression, open PR. Production #3 is unchanged.
+
+
+### WB-003 — Lockfile + supported Playwright runner (2026-11-18)
+
+- Previous HEAD `f1cc7c629716e4cc67bfea546c71dc92279adeff`: [Workbench CI 44230774775](https://github.com/hutong236/hulane-opencode/actions/runs/44230774775) Node 20 passed; Node 22 failed to install Chromium because `ubuntu-latest` resolved to Ubuntu 26.04, unsupported by pinned Playwright 1.56.1. Source compile/unit tests were not the reported failure.
+- New checkpoint pins Workbench CI runner to `ubuntu-24.04`, commits npm lockfile from a real runner installation, returns CI to `npm ci`. E2E browser pass/fail pending on this SHA.
+- Next: inspect 4 Playwright browser smoke cases; fix actual failures before approval and PR #38 merge. Production #3 remains open.

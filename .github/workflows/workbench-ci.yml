@@ -12,7 +12,7 @@ permissions:
   contents: read
 jobs:
   workbench:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -24,14 +24,7 @@ jobs:
           node-version: ${{ matrix.node }}
       - name: Install reproducible locked dependencies
         working-directory: workbench
-        run: npm install --no-audit --no-fund
-      - name: Export WB003 dependency lockfile
-        working-directory: workbench
-        shell: bash
-        run: |
-          printf 'WB003_LOCK_BEGIN\\n'
-          base64 -w0 package-lock.json
-          printf '\\nWB003_LOCK_END\\n'
+        run: npm ci --no-audit --no-fund
       - name: Lint (source conflict markers and whitespace)
         working-directory: workbench
         run: npm run lint
