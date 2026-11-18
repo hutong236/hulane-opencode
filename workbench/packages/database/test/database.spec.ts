@@ -100,6 +100,39 @@ test('separate connections honor compare-and-swap concurrency updates', () => {
   } finally { x.dispose(); }
 });
 
+test('a second writer respects the busy timeout while another writer holds the lease', () => {
+  const x = fixture();
+  const second = new WorkbenchDatabase({ dataDirectory: x.dir, busyTimeoutMs: 50 });
+  try {
+    x.database.connection.exec('BEGIN IMMEDIATE');
+    try {
+      assert.throws(() => second.projects.create({
+        slug: 'locked', name: 'Locked', repoRoot: '/tmp/locked',
+      }), /database is locked/i);
+    } finally {
+      x.database.connection.exec('ROLLBACK');
+    }
+    assert.equal(second.projects.create({
+      slug: 'released', name: 'Released', repoRoot: '/tmp/released',
+    }).revision, 1);
+  } finally {
+    second.close();
+    x.dispose();
+  }
+});
+
+test('migration checksums prevent changing previously installed SQL', () => {
+  const x = fixture();
+  try {
+    const altered = [{
+      ...BASE_MIGRATIONS[0],
+      sql: `${BASE_MIGRATIONS[0].sql}\n-- Unauthorized migration modification`,
+    }];
+    assert.throws(() => applyMigrations(x.database.connection, altered), /Migration history mismatch/);
+    assert.equal(x.database.connection.pragma('user_version', { simple: true }), 1);
+  } finally { x.dispose(); }
+});
+
 test('backup is an independent SQLite database with committed records', async () => {
   const x = fixture();
   try {

@@ -296,3 +296,11 @@ npm test
 - Current step: commit Runner-generated `workbench/package-lock.json`, restore `npm ci`, add typings for SQLite count queries, use canonical macOS temporary test directories, clean isolated fixtures, publish ESM package typing exports.
 - Verification status: fresh CI for this checkpoint pending. Full sqlite tests, root regression, macOS/Linux compatibility and correct WAL backup behavior must be checked in Actions; no test result is invented.
 - Next: inspect exact HEAD CI for both Node 20/22; fix real failures, review DB migration/backup and repository boundaries, then open PR #6 and retain production #3.
+
+
+### WB-002 — Atomic migration history and SQLite writer contention (2026-11-18)
+
+- Existing HEAD `8946f80e8e60318f03427a56951245bf554d83ac` was verified by [Workbench CI 44229238584](https://github.com/hutong236/hulane-opencode/actions/runs/44229238584) (Node 20/22 2/2 success) and [Hulane CI 44229238505](https://github.com/hutong236/hulane-opencode/actions/runs/44229238505) (6/6 success).
+- This checkpoint moves migration history reads and writes into the same SQLite BEGIN IMMEDIATE transaction, preventing concurrent startup races. Adds busy-timeout contention and migration tampering negative tests.
+- No OpenCode CLI invocation from this development session; existing Hulane CI exercises its own CLI separately.
+- Current step's CI pending until actual GitHub Actions status is observed. Next: verify final SHA, open PR for Issue #6 and confirm all acceptance gates.
