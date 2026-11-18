@@ -8,8 +8,8 @@ Each run reads all WB-001 through WB-028 Issues and dependencies, prioritizes re
 
 Repository Settings -> Secrets and variables -> Actions:
 
-- **Variable** `WORKBENCH_AUTODEV_MODEL`: exact OpenCode `provider/model` identifier.
-- **Secret** `WORKBENCH_OPENAI_API_KEY` **or** `WORKBENCH_ANTHROPIC_API_KEY`: API credential for that model.
+- **Variable** `WORKBENCH_AUTODEV_MODEL`: exact OpenCode `provider/model` identifier. Recommended for DeepSeek: `deepseek/deepseek-flash` (current V4.1 Flash); alternative `deepseek/deepseek-v4-pro`.
+- **Secret** `WORKBENCH_DEEPSEEK_API_KEY` for DeepSeek, `WORKBENCH_OPENAI_API_KEY` for OpenAI, or `WORKBENCH_ANTHROPIC_API_KEY` for Anthropic. The required key must match the selected model's provider.
 - **Secret** `WORKBENCH_AUTODEV_TOKEN`: fine-grained repository PAT or GitHub App token with Contents Read/Write and Pull Requests Read/Write. Use a dedicated identity, NOT any production credentials. Unlike the built-in GITHUB_TOKEN, a separate app/PAT token can trigger the normal CI workflows after push/PR events.
 
 Until configured, the run reports **BLOCKED** and makes no model call or GitHub write. Provider billing may apply once activated; set spending limits.
@@ -25,3 +25,13 @@ Until configured, the run reports **BLOCKED** and makes no model call or GitHub 
 - Selector verification: `node --test test/workbench-autodev.test.mjs`. No workflow is production-approved merely because this unit test passes.
 
 In each run, see the GitHub Actions Job Summary for the selected task, blocked dependencies, test result and PR SHA.
+
+## DeepSeek API (BYOK)
+
+1. Create a DeepSeek API Key in https://platform.deepseek.com/ (API access and billing are separate from the consumer chat app).
+2. In **Settings > Secrets and variables > Actions > Variables**, set `WORKBENCH_AUTODEV_MODEL` = `deepseek/deepseek-flash`. For Pro, use `deepseek/deepseek-v4-pro` only if your pinned OpenCode V2 installation lists it.
+3. Under **Secrets**, set `WORKBENCH_DEEPSEEK_API_KEY` to the private key. The workflow maps this securely to the native `DEEPSEEK_API_KEY` environment variable in OpenCode's standalone process.
+4. Configure the separate, fine-grained `WORKBENCH_AUTODEV_TOKEN` for branch pushes and Draft PRs.
+5. In Actions, manually dispatch `Workbench autonomous development`; inspect output and branch/PR, then allow scheduled execution. No API call has been verified until a real run succeeds.
+
+The credential gate validates that a `deepseek/*` model has a **DeepSeek** key, rather than accepting unrelated OpenAI/Anthropic credentials. DeepSeek's legacy API model names `deepseek-chat` and `deepseek-reasoner` were discontinued in July 2026. The official DeepSeek current endpoint uses `https://api.deepseek.com`, which the supported OpenCode native DeepSeek provider handles. If pinned OpenCode V2.2.7 does not expose the current model in its catalog, validate model availability before changing the pinned CLI or adding a custom provider definition; do not silently substitute the old model IDs.
