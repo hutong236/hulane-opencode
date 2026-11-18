@@ -304,3 +304,52 @@ npm test
 - This checkpoint moves migration history reads and writes into the same SQLite BEGIN IMMEDIATE transaction, preventing concurrent startup races. Adds busy-timeout contention and migration tampering negative tests.
 - No OpenCode CLI invocation from this development session; existing Hulane CI exercises its own CLI separately.
 - Current step's CI pending until actual GitHub Actions status is observed. Next: verify final SHA, open PR for Issue #6 and confirm all acceptance gates.
+
+
+### WB-003 — Browser Shell first checkpoint (2026-11-18)
+
+- Issue #7, branch `feat/WB-003-web-shell-routing` based on `main` `ad726e5a499e893f5d4dc4a8251e243d70081685`.
+- Added six URL routes, browser history handling, responsive mobile Drawer, breadcrumbs, error boundary, real /api/health state and retry, local-only theme preference and honest disabled business pages. Added route and API error unit tests.
+- No additional npm packages in this checkpoint. CI status unverified until the exact new SHA runs. No core Hulane paths were changed.
+- Next: inspect Workbench/Hulane CI, then add Playwright smoke and lockfile, verify deep-link refresh and mobile navigation. Production Issue #3 remains open.
+
+
+### WB-003 Playwright browser tests checkpoint
+
+- Earlier HEAD `0c0a35a5c5bc87bb29aa6d42655631cdde450068`: Workbench CI 44230432635 (2/2 passed), Hulane CI 44230432632 (6/6 passed).
+- Added pinned Playwright Chromium and tests for six browser routes, reload, HTTP 500 retry, mobile Drawer and local theme persistence.
+- Temporarily run npm install to export exact lockfile. This checkpoint's CI remains pending. Next: commit lockfile, restore npm ci, verify browsers and regression, open PR. Production #3 is unchanged.
+
+
+### WB-003 — Lockfile + supported Playwright runner (2026-11-18)
+
+- Previous HEAD `f1cc7c629716e4cc67bfea546c71dc92279adeff`: [Workbench CI 44230774775](https://github.com/hutong236/hulane-opencode/actions/runs/44230774775) Node 20 passed; Node 22 failed to install Chromium because `ubuntu-latest` resolved to Ubuntu 26.04, unsupported by pinned Playwright 1.56.1. Source compile/unit tests were not the reported failure.
+- New checkpoint pins Workbench CI runner to `ubuntu-24.04`, commits npm lockfile from a real runner installation, returns CI to `npm ci`. E2E browser pass/fail pending on this SHA.
+- Next: inspect 4 Playwright browser smoke cases; fix actual failures before approval and PR #38 merge. Production #3 remains open.
+
+
+### WB-003 — Use GitHub runner's preinstalled Chrome (2026-11-18)
+
+- Workbench CI 44231007520 had Node 20 test/build success while Node 22 Playwright Chromium download remained in progress. GitHub Ubuntu 24.04 x64 image documents Google Chrome as preinstalled; Playwright supports `channel: chrome`.
+- Switch E2E from downloaded bundled Chromium to preinstalled Chrome, explicitly verify `google-chrome --version`, removing repeated browser binary installation. Tests still run in real headless Chrome.
+- Actual browser test result for this change remains unverified until fresh CI. No affected production gates (#3) or privileged tool calls.
+
+
+### WB-003 — Separate Node 20 HTTP smoke from Node 22 browser E2E
+
+- At HEAD `4a9923f01d5608d11d6a4a02c51d010b8161b425`, Workbench CI [44231451726](https://github.com/hutong236/hulane-opencode/actions/runs/44231451726) Node 22 browser step failed BEFORE tests: the previous HTTP smoke started `npm run dev`, and its child service stayed bound to port 3000. Playwright refused to reuse it under CI strict mode. Node 20 tests succeeded.
+- Fix: run independent HTTP smoke only on Node 20; Node 22 will test an isolated fresh server through Playwright's built-in `webServer`. Both suites still validate true `/api/health` connectivity.
+- New SHA requires CI verification before merging PR #38. Production Issue #3 unchanged.
+
+
+### WB-003 — Shared UI primitives and confirmed theme reset
+
+- Exact prior HEAD `74e31df30d524035c99ac4c3a71b385336d34e1f`: [Workbench CI 44231617335](https://github.com/hutong236/hulane-opencode/actions/runs/44231617335) Node 20/22 green, including **4/4 browser E2E**; [Hulane CI 44231617289](https://github.com/hutong236/hulane-opencode/actions/runs/44231617289) 6/6 green.
+- This change adds reusable empty DataTable and Popconfirm components, and uses confirmation to reset browser-local theme. Adds a Playwright test covering cancel and confirm actions.
+- New CI results pending; do not mark PR #38 ready or Issue #7 accepted before exact new SHA passes.
+
+
+### WB-003 — Stabilize Popconfirm E2E locator
+
+- [Workbench CI 44231934598](https://github.com/hutong236/hulane-opencode/actions/runs/44231934598) previous HEAD `bc083e8af61ff0619e9af8069c4063cf867abdf5`: 4 existing Playwright tests passed, new confirmation test failed at a role/name locator for the Cancel action; actual confirmation title was visible. Node 20 passed, Node 22 test exit failed.
+- Replace locale-sensitive accessible-name selector with scoped `.ant-popconfirm-buttons button` DOM selection and assert both controls exist. New CI must verify cancel and confirm behavior. Hulane production gate #3 unchanged.

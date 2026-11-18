@@ -12,7 +12,7 @@ permissions:
   contents: read
 jobs:
   workbench:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -39,6 +39,7 @@ jobs:
         run: npm test
 
       - name: Web and API HTTP smoke
+        if: matrix.node == 20
         working-directory: workbench
         shell: bash
         run: |
@@ -61,3 +62,11 @@ jobs:
           fi
           grep -q '<title>OpenCode 工作台</title>' /tmp/workbench-home.html
           node -e 'const h=require("node:fs"); if(JSON.parse(h.readFileSync("/tmp/workbench-health.json")).status!=="ok") process.exit(1)'
+
+      - name: Verify preinstalled Google Chrome
+        if: matrix.node == 22
+        run: google-chrome --version
+      - name: Browser E2E smoke
+        if: matrix.node == 22
+        working-directory: workbench
+        run: npm run test:e2e
