@@ -347,3 +347,9 @@ npm test
 - Exact prior HEAD `74e31df30d524035c99ac4c3a71b385336d34e1f`: [Workbench CI 44231617335](https://github.com/hutong236/hulane-opencode/actions/runs/44231617335) Node 20/22 green, including **4/4 browser E2E**; [Hulane CI 44231617289](https://github.com/hutong236/hulane-opencode/actions/runs/44231617289) 6/6 green.
 - This change adds reusable empty DataTable and Popconfirm components, and uses confirmation to reset browser-local theme. Adds a Playwright test covering cancel and confirm actions.
 - New CI results pending; do not mark PR #38 ready or Issue #7 accepted before exact new SHA passes.
+
+
+### WB-003 — Stabilize Popconfirm E2E locator
+
+- [Workbench CI 44231934598](https://github.com/hutong236/hulane-opencode/actions/runs/44231934598) previous HEAD `bc083e8af61ff0619e9af8069c4063cf867abdf5`: 4 existing Playwright tests passed, new confirmation test failed at a role/name locator for the Cancel action; actual confirmation title was visible. Node 20 passed, Node 22 test exit failed.
+- Replace locale-sensitive accessible-name selector with scoped `.ant-popconfirm-buttons button` DOM selection and assert both controls exist. New CI must verify cancel and confirm behavior. Hulane production gate #3 unchanged.

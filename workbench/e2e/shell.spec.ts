@@ -56,10 +56,11 @@ test('resetting the browser theme requires confirmation', async ({ page }) => {
 
   await page.getByRole('button', { name: '恢复默认' }).click();
   await expect(page.getByText('确认恢复默认外观？')).toBeVisible();
-  await page.getByRole('button', { name: '取消' }).click();
+  await expect(page.locator('.ant-popconfirm-buttons button')).toHaveCount(2);
+  await page.locator('.ant-popconfirm-buttons button').first().click();
   await expect(page.locator('.app-layout')).toHaveClass(/theme-dark/);
 
   await page.getByRole('button', { name: '恢复默认' }).click();
-  await page.getByRole('button', { name: '确认' }).click();
+  await page.locator('.ant-popconfirm-buttons button').last().click();
   await expect(page.locator('.app-layout')).not.toHaveClass(/theme-dark/);
 });
