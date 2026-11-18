@@ -29,21 +29,15 @@ jobs:
           node-version: '22'
       - name: Verify issue selection and safety logic
         run: node --test test/workbench-autodev.test.mjs
-      - name: Require configured model and scoped publishing token
+      - name: Require credentials matching the selected model provider
         id: configured
         env:
           MODEL: ${{ vars.WORKBENCH_AUTODEV_MODEL }}
           OPENAI_API_KEY: ${{ secrets.WORKBENCH_OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.WORKBENCH_ANTHROPIC_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.WORKBENCH_DEEPSEEK_API_KEY }}
           WRITE_TOKEN: ${{ secrets.WORKBENCH_AUTODEV_TOKEN }}
-        shell: bash
-        run: |
-          if [ -z "$MODEL" ] || { [ -z "$OPENAI_API_KEY" ] && [ -z "$ANTHROPIC_API_KEY" ]; } || [ -z "$WRITE_TOKEN" ]; then
-            echo 'enabled=false' >> "$GITHUB_OUTPUT"
-            echo 'BLOCKED: configure WORKBENCH_AUTODEV_MODEL, matching provider secret, and WORKBENCH_AUTODEV_TOKEN.' >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo 'enabled=true' >> "$GITHUB_OUTPUT"
-          fi
+        run: node bin/workbench-provider.mjs
       - name: Select one ready Issue or failing PR
         if: steps.configured.outputs.enabled == 'true'
         id: select
@@ -81,6 +75,7 @@ jobs:
           MODEL: ${{ vars.WORKBENCH_AUTODEV_MODEL }}
           OPENAI_API_KEY: ${{ secrets.WORKBENCH_OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.WORKBENCH_ANTHROPIC_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.WORKBENCH_DEEPSEEK_API_KEY }}
         shell: bash
         run: |
           set -euo pipefail
