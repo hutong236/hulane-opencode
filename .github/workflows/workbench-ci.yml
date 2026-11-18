@@ -1,0 +1,63 @@
+name: Workbench CI
+on:
+  pull_request:
+    paths:
+      - 'workbench/**'
+      - '.github/workflows/workbench-ci.yml'
+  push:
+    paths:
+      - 'workbench/**'
+      - '.github/workflows/workbench-ci.yml'
+permissions:
+  contents: read
+jobs:
+  workbench:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Install reproducible locked dependencies
+        working-directory: workbench
+        run: npm ci --no-audit --no-fund
+      - name: Lint (source conflict markers and whitespace)
+        working-directory: workbench
+        run: npm run lint
+      - name: Typecheck
+        working-directory: workbench
+        run: npm run typecheck
+      - name: Build
+        working-directory: workbench
+        run: npm run build
+      - name: API tests
+        working-directory: workbench
+        run: npm test
+
+      - name: Web and API HTTP smoke
+        working-directory: workbench
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run dev > /tmp/workbench-dev.log 2>&1 &
+          DEV_PID=$!
+          trap 'kill "$DEV_PID" 2>/dev/null || true' EXIT
+          READY=0
+          for attempt in {1..30}; do
+            if curl -fsS http://127.0.0.1:3000/ > /tmp/workbench-home.html \
+               && curl -fsS http://127.0.0.1:3000/api/health > /tmp/workbench-health.json; then
+              READY=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$READY" != 1 ]; then
+            cat /tmp/workbench-dev.log
+            exit 1
+          fi
+          grep -q '<title>OpenCode 工作台</title>' /tmp/workbench-home.html
+          node -e 'const h=require("node:fs"); if(JSON.parse(h.readFileSync("/tmp/workbench-health.json")).status!=="ok") process.exit(1)'

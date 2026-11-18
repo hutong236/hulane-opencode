@@ -235,3 +235,48 @@ npm test
 - Checks: Node 20 and Node 22 core suites passed in [PR run 44152746154](https://github.com/hutong236/hulane-opencode/actions/runs/44152746154); macOS ARM job was still in progress at last review, **full CI not yet certified**. Final security guard also refuses secret-like file names and symlinks.
 - Safety: No PR auto-merge, no Issue auto-close, no production Gate bypass. Needs real GitHub Actions scheduled run validation once merged to main; Issue #3 remains open.
 - Next: validate full CI on exact final SHA; review+merge PR #35; configure secrets and model variable; dispatch one manual smoke run before relying on cron.
+
+## Workbench Web UI kickoff — WB-001 (2026-11-18)
+
+- Branch: `feat/WB-001-workbench-bootstrap`, PR [#33](https://github.com/hutong236/hulane-opencode/pull/33) (Draft), Issue [#5](https://github.com/hutong236/hulane-opencode/issues/5).
+- Initial checkpoint: `a644f4507a7574f0d28e1a309f872d8aa1b5dab6` (27 files under workbench/ plus dedicated CI); React/Ant Design shell, local Fastify health endpoint, Worker/adapter boundaries.
+- Evidence: [Workbench CI 44136603060](https://github.com/hutong236/hulane-opencode/actions/runs/44136603060) failed Typecheck (AntD Alert uses `message`, not `title`); root CI 44136524819 failed because `node --test` discovered new TypeScript `.test.ts` file. Root/main baseline remains unchanged.
+- Fix: use `message`, rename test to `.spec.ts`, run it with `tsx --test`, enable TS extension import only for no-emit test config. Pending fresh CI verification. Keep PR Draft and do not claim WB-001 complete.
+- Next: generate reproducible workbench/package-lock.json; use `npm ci` in workbench CI; implement lint/browser Smoke and run acceptance. GitHub runner may be used because current local container cannot resolve npm Registry (EAI_AGAIN).
+- Separately, a read-only 30-minute delivery monitor is proposed by PR [#34](https://github.com/hutong236/hulane-opencode/pull/34); it will not run on schedule until merged into main.
+
+
+### WB-001 — Fix root test isolation (2026-11-18)
+
+- Failure confirmed: existing [Hulane CI run 44138113271](https://github.com/hutong236/hulane-opencode/actions/runs/44138113271) collected `workbench/apps/api/test/health.spec.ts` under root `node --test`, but root install has no Fastify; 181/182 tests passed before collection failure. It is not a regression of Hulane core assertions.
+- Fix root `npm test` to explicitly run `test/*.test.mjs` for the pre-existing core test suite; Workbench tests remain in independent `workbench/ npm test`. New CI must confirm both, and no test is silently dropped from the core suite.
+- Next: recheck exact branch SHA, root CI and Workbench CI. Review PR #33, keep #3 untouched.
+
+### WB-001 — Root test discovery regression guard (2026-11-17)
+
+- Task: add a Node built-in regression test enforcing explicit root test glob and independent Workbench test command, preventing accidental Fastify-dependent `.spec.ts` discovery by the root CI.
+- Branch: `feat/WB-001-workbench-bootstrap`; PR #33; parent `11dc8ed32b7a544623cb6460c5f682f8aeddf4f3`.
+- Files: `test/workbench-test-isolation.test.mjs`, `docs/SESSION_HANDOFF.md`.
+- Validation: test is designed for existing root `npm test` on Node 20/22; **not locally executed** in this connector-only execution. Exact post-push Actions must determine pass/fail. Previous [Hulane CI 44153651055](https://github.com/hutong236/hulane-opencode/actions/runs/44153651055) had core Node20/22 success and one cancelled macOS ARM job; [Workbench CI 44153651029](https://github.com/hutong236/hulane-opencode/actions/runs/44153651029) succeeded.
+- Risk: cancellation is not evidence of a failing test; do not mark the full Hulane matrix green. No real OpenCode CLI executed in this step.
+- Next: inspect the new commit's full CI matrix, diagnose any actual failed job, and finish WB-001 review; keep Issue #5 open until verified acceptance and Issue #3 open for production gates.
+
+### WB-001 — Negative API route regression (2026-11-17)
+
+- Task / acceptance: GET /api/does-not-exist must return HTTP 404 and must not report status=ok; GET /api/health remains covered by existing positive test.
+- Branch: `feat/WB-001-workbench-bootstrap`; Draft PR #33; parent `b0a45e415c03f752d8cd7261020e4b22746579b2`.
+- Files: `workbench/apps/api/test/health.spec.ts`, `docs/SESSION_HANDOFF.md`.
+- Validation: connector-only change; local npm tests **not run**. Previous exact-parent Workbench CI [44172729271](https://github.com/hutong236/hulane-opencode/actions/runs/44172729271) succeeded; Hulane CI [44172728998](https://github.com/hutong236/hulane-opencode/actions/runs/44172728998) marked failure solely with macOS ARM job cancelled, five other jobs succeeded. New SHA CI is pending verification; no real OpenCode CLI run here.
+- Concurrency: 100 latest Actions runs showed no queued/in-progress jobs at pre-write check; PR #33 head matched parent. GitHub auto-coding workflow in PR #35 is not merged into main.
+- Risk: API negative path test not yet verified by runner; full Hulane matrix not green. Issue #5 and production Issue #3 remain open.
+- Next: inspect new CI for this commit; investigate macOS ARM cancellation if reproducible, then add lint command and finish WB-001 acceptance.
+
+### WB-001 checkpoint — source lint and CI gate (2026-11-18)
+
+- Task: Add a deterministic zero-dependency Workbench source lint command, CI gate and regression tests; keep the existing independent npm lockfile unchanged.
+- Branch: `feat/WB-001-workbench-bootstrap`; parent `6c537e3fcee4b98ddd2425e377c11fedac58481c`. The authoritative new SHA is the remote branch HEAD after push.
+- Files: `workbench/package.json`, `workbench/scripts/lint.mjs`, `workbench/test/lint.test.mjs`, `.github/workflows/workbench-ci.yml`, this handoff.
+- Acceptance: `npm run lint` rejects unresolved conflict markers, trailing whitespace, CRLF and missing final newline in Workbench source files; Node test fixtures cover positive/negative cases; Node 20/22 Workbench CI runs lint before typecheck/build/test.
+- Validation: GitHub API source inspection only before push; no local `npm ci`, `npm run lint` or `npm test` executed in this session. CI for the new commit is pending until an actual Actions run is observed. Previous branch HEAD `6c537e3fcee4b98ddd2425e377c11fedac58481c` had successful Workbench/Hulane CI runs 44192490340/44192490474.
+- Risk: This is intentionally a narrow source-hygiene lint, not a full ESLint ruleset. Existing files may require style cleanup if CI flags violations. No production Gate #3 claim.
+- Next: inspect the new SHA's Workbench/Hulane CI; fix any real lint failure in a separate checkpoint, then complete WB-001 remaining browser/runtime acceptance.
