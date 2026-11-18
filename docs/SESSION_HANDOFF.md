@@ -371,3 +371,12 @@ npm test
 - Validation: connector-only edit; local tests **not run**. Previous parent Workbench CI 44235079874 and Hulane CI 44235079936 passed; new SHA requires its own CI evidence.
 - Risk: project registration CRUD/UI and duplicate-path persistence remain incomplete; Issue #8 stays open.
 - Next: wire validated canonical root into project registration and add duplicate registration rejection tests; no production Gate approval (#3).
+
+### WB-004 — Git root pre-registration API boundary (2026-11-18)
+
+- Branch: `feat/WB-004-repo-root-validation`; parent `671b1774482b33df79eb3a9f0f9a2a34a5daa752`; authoritative commit SHA is remote branch HEAD after push.
+- Scope: `POST /api/projects/validate` uses canonical Git root validator; rejects missing/non-string and invalid paths with HTTP 400, without returning local Git stderr or rejected paths.
+- Regression: Fastify inject test for real temporary Git repository, non-Git directory, relative path and invalid body types.
+- Validation: connector-only code change; local tests **not run**. Parent Workbench CI 44247948169 and Hulane CI 44247948168 succeeded; new SHA CI must be checked independently. Real OpenCode CLI not exercised.
+- Risk: this endpoint validates only; it does not persist registrations or implement CRUD/UI. Issue #8 and production Issue #3 remain open.
+- Next: implement atomic database-backed registration with canonical root uniqueness and duplicate rejection, then connect UI.
