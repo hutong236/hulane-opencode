@@ -333,3 +333,10 @@ npm test
 - Workbench CI 44231007520 had Node 20 test/build success while Node 22 Playwright Chromium download remained in progress. GitHub Ubuntu 24.04 x64 image documents Google Chrome as preinstalled; Playwright supports `channel: chrome`.
 - Switch E2E from downloaded bundled Chromium to preinstalled Chrome, explicitly verify `google-chrome --version`, removing repeated browser binary installation. Tests still run in real headless Chrome.
 - Actual browser test result for this change remains unverified until fresh CI. No affected production gates (#3) or privileged tool calls.
+
+
+### WB-003 — Separate Node 20 HTTP smoke from Node 22 browser E2E
+
+- At HEAD `4a9923f01d5608d11d6a4a02c51d010b8161b425`, Workbench CI [44231451726](https://github.com/hutong236/hulane-opencode/actions/runs/44231451726) Node 22 browser step failed BEFORE tests: the previous HTTP smoke started `npm run dev`, and its child service stayed bound to port 3000. Playwright refused to reuse it under CI strict mode. Node 20 tests succeeded.
+- Fix: run independent HTTP smoke only on Node 20; Node 22 will test an isolated fresh server through Playwright's built-in `webServer`. Both suites still validate true `/api/health` connectivity.
+- New SHA requires CI verification before merging PR #38. Production Issue #3 unchanged.

@@ -39,6 +39,7 @@ jobs:
         run: npm test
 
       - name: Web and API HTTP smoke
+        if: matrix.node == 20
         working-directory: workbench
         shell: bash
         run: |
