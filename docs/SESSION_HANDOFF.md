@@ -353,3 +353,12 @@ npm test
 
 - [Workbench CI 44231934598](https://github.com/hutong236/hulane-opencode/actions/runs/44231934598) previous HEAD `bc083e8af61ff0619e9af8069c4063cf867abdf5`: 4 existing Playwright tests passed, new confirmation test failed at a role/name locator for the Cancel action; actual confirmation title was visible. Node 20 passed, Node 22 test exit failed.
 - Replace locale-sensitive accessible-name selector with scoped `.ant-popconfirm-buttons button` DOM selection and assert both controls exist. New CI must verify cancel and confirm behavior. Hulane production gate #3 unchanged.
+
+
+### WB-004 — Canonical Git repository root validation (2026-11-18)
+
+- Branch: `feat/WB-004-repo-root-validation`; parent `b908c34f0f1a596ec15342e59e96435014526bd3`; authoritative SHA is the verified remote HEAD.
+- Scope: reusable fail-closed registration boundary: absolute path, no symlink components, real Git worktree root, Git invoked without a shell.
+- Regression: temporary Git root, nested directory, non-Git directory, relative path and symlink alias.
+- Validation: connector-only source changes; local npm/tsx tests **not run**. Check exact-SHA Actions before claiming success. Issue #8 CRUD/UI remain incomplete.
+- Next: check CI, then integrate validation and duplicate detection into project registration. Production Issue #3 remains open.
