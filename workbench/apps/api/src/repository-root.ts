@@ -18,12 +18,19 @@ export async function validateRepositoryRoot(input: string): Promise<string> {
     if (!stat.isDirectory()) throw new Error('Repository path must be a directory');
   }
   const canonical = await realpath(normalized);
-  const { stdout } = await execFileAsync('git', ['-C', canonical, 'rev-parse', '--show-toplevel'], {
+  // A caller's Git environment must never redirect validation to another repository.
+  const env = { ...process.env };
+  for (const key of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE', 'GIT_CEILING_DIRECTORIES']) {
+    delete env[key];
+  }
+  const { stdout } = await execFileAsync('git', ['-C', canonical, 'rev-parse', '--is-inside-work-tree', '--show-toplevel'], {
+    env,
     timeout: 5000,
     maxBuffer: 1024 * 1024,
   });
-  if (resolve(stdout.trim()) !== canonical) {
-    throw new Error('Repository path must be the Git worktree root');
+  const lines = stdout.trim().split(/\r?\n/);
+  if (lines.length !== 2 || lines[0] !== 'true' || resolve(lines[1]) !== canonical) {
+    throw new Error('Repository path must be a non-bare Git worktree root');
   }
   return canonical;
 }

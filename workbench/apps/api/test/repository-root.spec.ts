@@ -24,3 +24,26 @@ test('accepts canonical Git roots and rejects nested, non-Git and symlink paths'
     await rm(temp, { recursive: true, force: true });
   }
 });
+
+test('rejects bare repositories and ignores inherited Git redirection variables', async () => {
+  const temp = await mkdtemp(join(tmpdir(), 'wb-repo-git-env-'));
+  try {
+    const valid = join(temp, 'valid');
+    const bare = join(temp, 'bare.git');
+    await mkdir(valid);
+    execFileSync('git', ['init', '-q', valid]);
+    execFileSync('git', ['init', '-q', '--bare', bare]);
+    await assert.rejects(validateRepositoryRoot(bare), /non-bare Git worktree root|Command failed/);
+    const original = process.env.GIT_DIR;
+    try {
+      process.env.GIT_DIR = join(valid, '.git');
+      assert.equal(await validateRepositoryRoot(valid), valid);
+      await assert.rejects(validateRepositoryRoot(temp), /Command failed|not a git repository/i);
+    } finally {
+      if (original === undefined) delete process.env.GIT_DIR;
+      else process.env.GIT_DIR = original;
+    }
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});

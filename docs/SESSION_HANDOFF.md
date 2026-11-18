@@ -362,3 +362,12 @@ npm test
 - Regression: temporary Git root, nested directory, non-Git directory, relative path and symlink alias.
 - Validation: connector-only source changes; local npm/tsx tests **not run**. Check exact-SHA Actions before claiming success. Issue #8 CRUD/UI remain incomplete.
 - Next: check CI, then integrate validation and duplicate detection into project registration. Production Issue #3 remains open.
+
+### WB-004 — Fail-closed Git worktree and environment isolation (2026-11-18)
+
+- Branch: `feat/WB-004-repo-root-validation`; parent `f0c9b3b3de73a3a14226bbd3aaecda7399ad8d88`; current remote HEAD must be checked after push.
+- Scope: reject bare repositories, require `--is-inside-work-tree=true`, and strip inherited Git location overrides before subprocess validation.
+- Regression: bare repository and hostile `GIT_DIR` redirect; retain existing canonical/nested/symlink tests.
+- Validation: connector-only edit; local tests **not run**. Previous parent Workbench CI 44235079874 and Hulane CI 44235079936 passed; new SHA requires its own CI evidence.
+- Risk: project registration CRUD/UI and duplicate-path persistence remain incomplete; Issue #8 stays open.
+- Next: wire validated canonical root into project registration and add duplicate registration rejection tests; no production Gate approval (#3).
