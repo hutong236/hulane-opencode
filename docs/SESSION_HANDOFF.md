@@ -326,3 +326,10 @@ npm test
 - Previous HEAD `f1cc7c629716e4cc67bfea546c71dc92279adeff`: [Workbench CI 44230774775](https://github.com/hutong236/hulane-opencode/actions/runs/44230774775) Node 20 passed; Node 22 failed to install Chromium because `ubuntu-latest` resolved to Ubuntu 26.04, unsupported by pinned Playwright 1.56.1. Source compile/unit tests were not the reported failure.
 - New checkpoint pins Workbench CI runner to `ubuntu-24.04`, commits npm lockfile from a real runner installation, returns CI to `npm ci`. E2E browser pass/fail pending on this SHA.
 - Next: inspect 4 Playwright browser smoke cases; fix actual failures before approval and PR #38 merge. Production #3 remains open.
+
+
+### WB-003 — Use GitHub runner's preinstalled Chrome (2026-11-18)
+
+- Workbench CI 44231007520 had Node 20 test/build success while Node 22 Playwright Chromium download remained in progress. GitHub Ubuntu 24.04 x64 image documents Google Chrome as preinstalled; Playwright supports `channel: chrome`.
+- Switch E2E from downloaded bundled Chromium to preinstalled Chrome, explicitly verify `google-chrome --version`, removing repeated browser binary installation. Tests still run in real headless Chrome.
+- Actual browser test result for this change remains unverified until fresh CI. No affected production gates (#3) or privileged tool calls.

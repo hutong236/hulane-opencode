@@ -62,10 +62,9 @@ jobs:
           grep -q '<title>OpenCode 工作台</title>' /tmp/workbench-home.html
           node -e 'const h=require("node:fs"); if(JSON.parse(h.readFileSync("/tmp/workbench-health.json")).status!=="ok") process.exit(1)'
 
-      - name: Install Playwright Chromium
+      - name: Verify preinstalled Google Chrome
         if: matrix.node == 22
-        working-directory: workbench
-        run: npx playwright install --with-deps chromium
+        run: google-chrome --version
       - name: Browser E2E smoke
         if: matrix.node == 22
         working-directory: workbench
