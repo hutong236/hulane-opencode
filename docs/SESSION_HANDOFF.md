@@ -340,3 +340,10 @@ npm test
 - At HEAD `4a9923f01d5608d11d6a4a02c51d010b8161b425`, Workbench CI [44231451726](https://github.com/hutong236/hulane-opencode/actions/runs/44231451726) Node 22 browser step failed BEFORE tests: the previous HTTP smoke started `npm run dev`, and its child service stayed bound to port 3000. Playwright refused to reuse it under CI strict mode. Node 20 tests succeeded.
 - Fix: run independent HTTP smoke only on Node 20; Node 22 will test an isolated fresh server through Playwright's built-in `webServer`. Both suites still validate true `/api/health` connectivity.
 - New SHA requires CI verification before merging PR #38. Production Issue #3 unchanged.
+
+
+### WB-003 — Shared UI primitives and confirmed theme reset
+
+- Exact prior HEAD `74e31df30d524035c99ac4c3a71b385336d34e1f`: [Workbench CI 44231617335](https://github.com/hutong236/hulane-opencode/actions/runs/44231617335) Node 20/22 green, including **4/4 browser E2E**; [Hulane CI 44231617289](https://github.com/hutong236/hulane-opencode/actions/runs/44231617289) 6/6 green.
+- This change adds reusable empty DataTable and Popconfirm components, and uses confirmation to reset browser-local theme. Adds a Playwright test covering cancel and confirm actions.
+- New CI results pending; do not mark PR #38 ready or Issue #7 accepted before exact new SHA passes.

@@ -47,3 +47,19 @@ test('local dark theme persists on reload', async ({ page }) => {
   await page.reload();
   await expect(page.locator('.app-layout')).toHaveClass(/theme-dark/);
 });
+
+test('resetting the browser theme requires confirmation', async ({ page }) => {
+  await page.goto('/settings');
+  await page.getByRole('switch').click();
+  await page.getByRole('button', { name: '保存设置' }).click();
+  await expect(page.locator('.app-layout')).toHaveClass(/theme-dark/);
+
+  await page.getByRole('button', { name: '恢复默认' }).click();
+  await expect(page.getByText('确认恢复默认外观？')).toBeVisible();
+  await page.getByRole('button', { name: '取消' }).click();
+  await expect(page.locator('.app-layout')).toHaveClass(/theme-dark/);
+
+  await page.getByRole('button', { name: '恢复默认' }).click();
+  await page.getByRole('button', { name: '确认' }).click();
+  await expect(page.locator('.app-layout')).not.toHaveClass(/theme-dark/);
+});

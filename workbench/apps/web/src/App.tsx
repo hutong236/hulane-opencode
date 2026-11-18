@@ -5,6 +5,7 @@ import {
 } from 'antd';
 import type { MenuProps } from 'antd';
 import { getHealth, type ApiHealth } from './api/client';
+import { ConfirmAction } from './components/UiPrimitives';
 import { sections, getSection, isSection, defaultSection, type Section } from './routes';
 
 const { Header, Sider, Content } = Layout;
@@ -53,6 +54,7 @@ function WorkbenchShell() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [dark, setDark] = useState(initialTheme);
   const [messageApi, contextHolder] = message.useMessage();
+  const [settingsForm] = Form.useForm<{ dark: boolean }>();
   const health = useHealth();
 
   useEffect(() => {
@@ -100,12 +102,19 @@ function WorkbenchShell() {
           {health.status === 'error' && <Alert type="error" showIcon message="API 连接失败" className="app-alert"
             description={<div><p>{health.error}</p><Button onClick={health.retry}>重试连接</Button></div>} />}
           {section.path === '/settings' ? <Card title="本地外观设置">
-            <Form layout="vertical" initialValues={{ dark }} onFinish={(values: { dark: boolean }) => {
+            <Form form={settingsForm} layout="vertical" initialValues={{ dark }} onFinish={(values: { dark: boolean }) => {
               setDark(values.dark);
               void messageApi.success('外观已保存到当前浏览器');
             }}>
               <Form.Item name="dark" label="深色模式" valuePropName="checked"><Switch /></Form.Item>
-              <Button htmlType="submit" type="primary">保存设置</Button>
+              <Space>
+                <Button htmlType="submit" type="primary">保存设置</Button>
+                <ConfirmAction label="恢复默认" title="确认恢复默认外观？" onConfirm={() => {
+                  settingsForm.setFieldValue('dark', false);
+                  setDark(false);
+                  void messageApi.success('已恢复默认外观');
+                }} />
+              </Space>
             </Form>
             <Paragraph className="app-settings-hint" type="secondary">
               模型、Agent、Skill 和 MCP 管理尚未开放（WB-025、WB-026）。
