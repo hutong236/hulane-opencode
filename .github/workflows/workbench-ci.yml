@@ -25,6 +25,9 @@ jobs:
       - name: Install reproducible locked dependencies
         working-directory: workbench
         run: npm ci --no-audit --no-fund
+      - name: Lint (source conflict markers and whitespace)
+        working-directory: workbench
+        run: npm run lint
       - name: Typecheck
         working-directory: workbench
         run: npm run typecheck

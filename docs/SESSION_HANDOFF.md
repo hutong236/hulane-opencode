@@ -270,3 +270,13 @@ npm test
 - Concurrency: 100 latest Actions runs showed no queued/in-progress jobs at pre-write check; PR #33 head matched parent. GitHub auto-coding workflow in PR #35 is not merged into main.
 - Risk: API negative path test not yet verified by runner; full Hulane matrix not green. Issue #5 and production Issue #3 remain open.
 - Next: inspect new CI for this commit; investigate macOS ARM cancellation if reproducible, then add lint command and finish WB-001 acceptance.
+
+### WB-001 checkpoint — source lint and CI gate (2026-11-18)
+
+- Task: Add a deterministic zero-dependency Workbench source lint command, CI gate and regression tests; keep the existing independent npm lockfile unchanged.
+- Branch: `feat/WB-001-workbench-bootstrap`; parent `6c537e3fcee4b98ddd2425e377c11fedac58481c`. The authoritative new SHA is the remote branch HEAD after push.
+- Files: `workbench/package.json`, `workbench/scripts/lint.mjs`, `workbench/test/lint.test.mjs`, `.github/workflows/workbench-ci.yml`, this handoff.
+- Acceptance: `npm run lint` rejects unresolved conflict markers, trailing whitespace, CRLF and missing final newline in Workbench source files; Node test fixtures cover positive/negative cases; Node 20/22 Workbench CI runs lint before typecheck/build/test.
+- Validation: GitHub API source inspection only before push; no local `npm ci`, `npm run lint` or `npm test` executed in this session. CI for the new commit is pending until an actual Actions run is observed. Previous branch HEAD `6c537e3fcee4b98ddd2425e377c11fedac58481c` had successful Workbench/Hulane CI runs 44192490340/44192490474.
+- Risk: This is intentionally a narrow source-hygiene lint, not a full ESLint ruleset. Existing files may require style cleanup if CI flags violations. No production Gate #3 claim.
+- Next: inspect the new SHA's Workbench/Hulane CI; fix any real lint failure in a separate checkpoint, then complete WB-001 remaining browser/runtime acceptance.
