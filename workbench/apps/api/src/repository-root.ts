@@ -20,8 +20,10 @@ export async function validateRepositoryRoot(input: string): Promise<string> {
   const canonical = await realpath(normalized);
   // A caller's Git environment must never redirect validation to another repository.
   const env = { ...process.env };
-  for (const key of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE', 'GIT_CEILING_DIRECTORIES']) {
-    delete env[key];
+  // Git honors many GIT_* overrides (including injected config and object directories).
+  // Remove the entire Git namespace rather than maintaining a fragile allowlist.
+  for (const key of Object.keys(env)) {
+    if (key.startsWith('GIT_')) delete env[key];
   }
   const { stdout } = await execFileAsync('git', ['-C', canonical, 'rev-parse', '--is-inside-work-tree', '--show-toplevel'], {
     env,

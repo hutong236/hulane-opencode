@@ -389,3 +389,11 @@ npm test
 - Validation: GitHub connector-only source edit; local `npm test` **not run**. Check exact new SHA Workbench CI and Hulane CI before claiming pass. No real OpenCode CLI exercised.
 - Limitation: the API registration endpoint is not yet connected to this repository, and path canonicalization must occur before calling `create`; Issue #8 stays open.
 - Next: add `POST /api/projects` backed by `validateRepositoryRoot` and `WorkbenchDatabase.projects.create`, map SQLite uniqueness errors to HTTP 409, and test API persistence and duplicate requests. Production Issue #3 remains open.
+
+### WB-004 — Git environment override hardening (2026-11-18)
+
+- Branch: `feat/WB-004-repo-root-validation`; parent `38b5d712bc166b1fc46d6351df6cc87b4755dea6`; authoritative SHA is remote branch HEAD after push.
+- Scope: strip all inherited `GIT_*` variables before running Git root validation, including injected `GIT_CONFIG_*` and alternate object directories; preserve non-Git process environment.
+- Regression: a real temporary Git repository remains valid despite hostile `GIT_CONFIG_COUNT` / `core.bare` and `GIT_OBJECT_DIRECTORY` overrides.
+- Validation: connector-only code change; local tests **not run**. Exact new SHA CI must be checked after push; real OpenCode CLI not exercised.
+- Next: implement `POST /api/projects` using canonical root validation and SQLite persistence, map duplicate registration to HTTP 409, and add Fastify API regression. Issue #8 and production Issue #3 remain open.

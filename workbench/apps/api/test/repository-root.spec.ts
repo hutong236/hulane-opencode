@@ -47,3 +47,26 @@ test('rejects bare repositories and ignores inherited Git redirection variables'
     await rm(temp, { recursive: true, force: true });
   }
 });
+
+
+test('ignores injected Git config and object-directory environment overrides', async () => {
+  const temp = await mkdtemp(join(tmpdir(), 'wb-repo-git-config-'));
+  const keys = ['GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0', 'GIT_CONFIG_VALUE_0', 'GIT_OBJECT_DIRECTORY'];
+  const previous = new Map(keys.map((key) => [key, process.env[key]]));
+  try {
+    const repo = join(temp, 'repo');
+    await mkdir(repo);
+    execFileSync('git', ['init', '-q', repo]);
+    process.env.GIT_CONFIG_COUNT = '1';
+    process.env.GIT_CONFIG_KEY_0 = 'core.bare';
+    process.env.GIT_CONFIG_VALUE_0 = 'true';
+    process.env.GIT_OBJECT_DIRECTORY = join(temp, 'missing-objects');
+    assert.equal(await validateRepositoryRoot(repo), repo);
+  } finally {
+    for (const [key, value] of previous) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    await rm(temp, { recursive: true, force: true });
+  }
+});
