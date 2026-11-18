@@ -42,6 +42,11 @@ export class ProjectRepository {
     return (this.db.prepare('SELECT * FROM projects WHERE id = ?').get(id) as Project | undefined) ?? null;
   }
 
+  /** Look up a canonical repository root before registration. The database UNIQUE constraint remains authoritative. */
+  findByRoot(repoRoot: string): Project | null {
+    return (this.db.prepare('SELECT * FROM projects WHERE repo_root = ?').get(repoRoot) as Project | undefined) ?? null;
+  }
+
   updateName(id: string, expectedRevision: number, name: string): Project | null {
     if (!name.trim()) throw new Error('Project name is required');
     const result = this.db.prepare(`

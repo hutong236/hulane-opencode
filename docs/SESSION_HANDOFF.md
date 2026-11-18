@@ -380,3 +380,12 @@ npm test
 - Validation: connector-only code change; local tests **not run**. Parent Workbench CI 44247948169 and Hulane CI 44247948168 succeeded; new SHA CI must be checked independently. Real OpenCode CLI not exercised.
 - Risk: this endpoint validates only; it does not persist registrations or implement CRUD/UI. Issue #8 and production Issue #3 remain open.
 - Next: implement atomic database-backed registration with canonical root uniqueness and duplicate rejection, then connect UI.
+
+### WB-004 — Persistent repository-root uniqueness regression (2026-11-18)
+
+- Branch: `feat/WB-004-repo-root-validation`; parent `83ec0ea5886bee669288ac083936ec73a7d9ee21`; latest SHA is the verified remote branch HEAD.
+- Scope: add `ProjectRepository.findByRoot` for canonical-root lookup; retain SQLite `repo_root UNIQUE` as the authoritative atomic duplicate guard.
+- Regression: two distinct slugs cannot register the same root; lookup and duplicate rejection persist after database close/reopen; failed registration leaves one record.
+- Validation: GitHub connector-only source edit; local `npm test` **not run**. Check exact new SHA Workbench CI and Hulane CI before claiming pass. No real OpenCode CLI exercised.
+- Limitation: the API registration endpoint is not yet connected to this repository, and path canonicalization must occur before calling `create`; Issue #8 stays open.
+- Next: add `POST /api/projects` backed by `validateRepositoryRoot` and `WorkbenchDatabase.projects.create`, map SQLite uniqueness errors to HTTP 409, and test API persistence and duplicate requests. Production Issue #3 remains open.
