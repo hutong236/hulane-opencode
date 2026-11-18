@@ -304,3 +304,11 @@ npm test
 - This checkpoint moves migration history reads and writes into the same SQLite BEGIN IMMEDIATE transaction, preventing concurrent startup races. Adds busy-timeout contention and migration tampering negative tests.
 - No OpenCode CLI invocation from this development session; existing Hulane CI exercises its own CLI separately.
 - Current step's CI pending until actual GitHub Actions status is observed. Next: verify final SHA, open PR for Issue #6 and confirm all acceptance gates.
+
+
+### WB-003 — Browser Shell first checkpoint (2026-11-18)
+
+- Issue #7, branch `feat/WB-003-web-shell-routing` based on `main` `ad726e5a499e893f5d4dc4a8251e243d70081685`.
+- Added six URL routes, browser history handling, responsive mobile Drawer, breadcrumbs, error boundary, real /api/health state and retry, local-only theme preference and honest disabled business pages. Added route and API error unit tests.
+- No additional npm packages in this checkpoint. CI status unverified until the exact new SHA runs. No core Hulane paths were changed.
+- Next: inspect Workbench/Hulane CI, then add Playwright smoke and lockfile, verify deep-link refresh and mobile navigation. Production Issue #3 remains open.
