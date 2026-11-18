@@ -397,3 +397,12 @@ npm test
 - Regression: a real temporary Git repository remains valid despite hostile `GIT_CONFIG_COUNT` / `core.bare` and `GIT_OBJECT_DIRECTORY` overrides.
 - Validation: connector-only code change; local tests **not run**. Exact new SHA CI must be checked after push; real OpenCode CLI not exercised.
 - Next: implement `POST /api/projects` using canonical root validation and SQLite persistence, map duplicate registration to HTTP 409, and add Fastify API regression. Issue #8 and production Issue #3 remain open.
+
+### WB-004 — Cross-connection duplicate-root regression (2026-11-18)
+
+- Branch: `feat/WB-004-repo-root-validation`; parent `ad0dfcf1a76531300ce3b9efe07a13270cc04611`; authoritative SHA is the remote branch HEAD after push.
+- Files: `workbench/packages/database/test/project-root-concurrency.spec.ts`, `docs/SESSION_HANDOFF.md`.
+- Acceptance: two independent SQLite connections see the same registered canonical root; a second slug cannot register it; exactly one row survives reopen.
+- Validation: source-level regression authored via GitHub connector; local `npm test` **not run** in this execution environment. Exact-commit Workbench/Hulane CI must be checked after push; never assume green.
+- Blockers: API `POST /api/projects` and CRUD/UI still missing; Issue #8 remains open. Production Issue #3 remains open.
+- Next atomic task: connect validated Git root with persistent project registration API, returning HTTP 400 for invalid input and HTTP 409 for duplicate roots, with Fastify inject tests.
