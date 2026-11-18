@@ -1,9 +1,9 @@
 import { homedir, platform, tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import {
-  existsSync, lstatSync, mkdirSync, realpathSync, statSync,
+  existsSync, lstatSync, mkdirSync, realpathSync, rmSync, statSync,
 } from 'node:fs';
-import { isAbsolute, join, resolve, sep, basename, dirname } from 'node:path';
+import { isAbsolute, join, resolve, dirname } from 'node:path';
 import Sqlite from 'better-sqlite3';
 import { applyMigrations } from './migrate.js';
 import { verifySchema } from './schema.js';
@@ -89,7 +89,7 @@ export class WorkbenchDatabase {
 
 export function createIsolatedTestDatabase(): { database: WorkbenchDatabase; cleanup: () => void } {
   // Deliberately not used in production; callers should remove the temp directory after closing.
-  const directory = join(tmpdir(), `hulane-workbench-test-${randomUUID()}`);
+  const directory = join(realpathSync(tmpdir()), `hulane-workbench-test-${randomUUID()}`);
   const database = new WorkbenchDatabase({ dataDirectory: directory, busyTimeoutMs: 100 });
-  return { database, cleanup: () => database.close() };
+  return { database, cleanup: () => { database.close(); rmSync(directory, { recursive: true, force: true }); } };
 }

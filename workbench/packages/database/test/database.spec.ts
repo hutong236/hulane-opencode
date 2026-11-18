@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, mkdirSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync, symlinkSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -7,7 +7,7 @@ import test from 'node:test';
 import { WorkbenchDatabase, applyMigrations, BASE_MIGRATIONS, EXPECTED_TABLES } from '../src/index.ts';
 
 function fixture() {
-  const dir = mkdtempSync(join(tmpdir(), 'wb-sqlite-spec-'));
+  const dir = mkdtempSync(join(realpathSync(tmpdir()), 'wb-sqlite-spec-'));
   const database = new WorkbenchDatabase({ dataDirectory: dir, busyTimeoutMs: 50 });
   return { dir, database, dispose: () => { database.close(); rmSync(dir, { recursive: true, force: true }); } };
 }
@@ -65,7 +65,7 @@ test('transaction rollback does not leak partial writes', () => {
       x.database.projects.create({ slug: 'cmdb', name: 'CMDB', repoRoot: '/tmp/cmdb' });
       throw new Error('failure injection');
     }), /failure injection/);
-    assert.equal(x.database.connection.prepare('SELECT count(*) AS n FROM projects').get().n, 0);
+    assert.equal((x.database.connection.prepare('SELECT count(*) AS n FROM projects').get() as { n: number }).n, 0);
   } finally { x.dispose(); }
 });
 
@@ -78,8 +78,8 @@ test('failed migration rolls back DDL and can retry corrected version', () => {
     ];
     assert.throws(() => applyMigrations(x.database.connection, invalid));
     assert.equal(x.database.connection.pragma('user_version', { simple: true }), 1);
-    assert.equal(x.database.connection.prepare('SELECT count(*) AS n FROM schema_migrations').get().n, 1);
-    assert.equal(x.database.connection.prepare("SELECT count(*) AS n FROM sqlite_master WHERE name='incomplete_table'").get().n, 0);
+    assert.equal((x.database.connection.prepare('SELECT count(*) AS n FROM schema_migrations').get() as { n: number }).n, 1);
+    assert.equal((x.database.connection.prepare("SELECT count(*) AS n FROM sqlite_master WHERE name='incomplete_table'").get() as { n: number }).n, 0);
     assert.equal(applyMigrations(x.database.connection, [
       ...BASE_MIGRATIONS, { version: 2, name: 'second', sql: 'CREATE TABLE completed_table(id TEXT);' },
     ]), 2);
@@ -115,7 +115,7 @@ test('backup is an independent SQLite database with committed records', async ()
 });
 
 test('rejects symlinked database directories and relative paths', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'wb-path-spec-'));
+  const dir = mkdtempSync(join(realpathSync(tmpdir()), 'wb-path-spec-'));
   try {
     mkdirSync(join(dir, 'target'));
     symlinkSync(join(dir, 'target'), join(dir, 'link'));

@@ -288,3 +288,11 @@ npm test
 - Scope: ten-table SQLite schema, WAL/foreign keys/busy timeout, transactional SHA-checked migrations, project CAS repository, backup, isolated tests and storage boundaries.
 - Validation: GitHub CI dependency generation/checkpoint pending (runner must resolve SQLite native driver). No local npm network available in this environment; do not report tests as passed until CI runs.
 - Next: capture and commit independently generated Workbench lockfile; return CI to `npm ci`; run Node 20/22 API+DB+Workbench and existing Hulane suites; fix failures before PR is reviewable.
+
+
+### WB-002 checkpoint — lockfile and types (2026-11-18)
+
+- Previous checkpoint `d39da5741cf63cd30a41c06853d7768a8d5c82c5`: [Workbench CI 44229008803](https://github.com/hutong236/hulane-opencode/actions/runs/44229008803) found three TypeScript test `unknown` cast failures, while native dependency installation and source lint succeeded.
+- Current step: commit Runner-generated `workbench/package-lock.json`, restore `npm ci`, add typings for SQLite count queries, use canonical macOS temporary test directories, clean isolated fixtures, publish ESM package typing exports.
+- Verification status: fresh CI for this checkpoint pending. Full sqlite tests, root regression, macOS/Linux compatibility and correct WAL backup behavior must be checked in Actions; no test result is invented.
+- Next: inspect exact HEAD CI for both Node 20/22; fix real failures, review DB migration/backup and repository boundaries, then open PR #6 and retain production #3.
