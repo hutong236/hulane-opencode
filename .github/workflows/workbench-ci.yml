@@ -24,7 +24,14 @@ jobs:
           node-version: ${{ matrix.node }}
       - name: Install reproducible locked dependencies
         working-directory: workbench
-        run: npm ci --no-audit --no-fund
+        run: npm install --no-audit --no-fund
+      - name: Export WB003 dependency lockfile
+        working-directory: workbench
+        shell: bash
+        run: |
+          printf 'WB003_LOCK_BEGIN\\n'
+          base64 -w0 package-lock.json
+          printf '\\nWB003_LOCK_END\\n'
       - name: Lint (source conflict markers and whitespace)
         working-directory: workbench
         run: npm run lint
@@ -61,3 +68,12 @@ jobs:
           fi
           grep -q '<title>OpenCode 工作台</title>' /tmp/workbench-home.html
           node -e 'const h=require("node:fs"); if(JSON.parse(h.readFileSync("/tmp/workbench-health.json")).status!=="ok") process.exit(1)'
+
+      - name: Install Playwright Chromium
+        if: matrix.node == 22
+        working-directory: workbench
+        run: npx playwright install --with-deps chromium
+      - name: Browser E2E smoke
+        if: matrix.node == 22
+        working-directory: workbench
+        run: npm run test:e2e

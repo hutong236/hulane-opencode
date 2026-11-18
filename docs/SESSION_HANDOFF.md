@@ -312,3 +312,10 @@ npm test
 - Added six URL routes, browser history handling, responsive mobile Drawer, breadcrumbs, error boundary, real /api/health state and retry, local-only theme preference and honest disabled business pages. Added route and API error unit tests.
 - No additional npm packages in this checkpoint. CI status unverified until the exact new SHA runs. No core Hulane paths were changed.
 - Next: inspect Workbench/Hulane CI, then add Playwright smoke and lockfile, verify deep-link refresh and mobile navigation. Production Issue #3 remains open.
+
+
+### WB-003 Playwright browser tests checkpoint
+
+- Earlier HEAD `0c0a35a5c5bc87bb29aa6d42655631cdde450068`: Workbench CI 44230432635 (2/2 passed), Hulane CI 44230432632 (6/6 passed).
+- Added pinned Playwright Chromium and tests for six browser routes, reload, HTTP 500 retry, mobile Drawer and local theme persistence.
+- Temporarily run npm install to export exact lockfile. This checkpoint's CI remains pending. Next: commit lockfile, restore npm ci, verify browsers and regression, open PR. Production #3 is unchanged.
