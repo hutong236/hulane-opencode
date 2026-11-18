@@ -280,3 +280,11 @@ npm test
 - Validation: GitHub API source inspection only before push; no local `npm ci`, `npm run lint` or `npm test` executed in this session. CI for the new commit is pending until an actual Actions run is observed. Previous branch HEAD `6c537e3fcee4b98ddd2425e377c11fedac58481c` had successful Workbench/Hulane CI runs 44192490340/44192490474.
 - Risk: This is intentionally a narrow source-hygiene lint, not a full ESLint ruleset. Existing files may require style cleanup if CI flags violations. No production Gate #3 claim.
 - Next: inspect the new SHA's Workbench/Hulane CI; fix any real lint failure in a separate checkpoint, then complete WB-001 remaining browser/runtime acceptance.
+
+
+### WB-002 — SQLite schema and storage foundation (2026-11-18)
+
+- Issue [#6](https://github.com/hutong236/hulane-opencode/issues/6), branch `feat/WB-002-sqlite-foundation`, starting from `main` `cc9288bf2bca2e87f9856db5eb626e9688d94b6b`.
+- Scope: ten-table SQLite schema, WAL/foreign keys/busy timeout, transactional SHA-checked migrations, project CAS repository, backup, isolated tests and storage boundaries.
+- Validation: GitHub CI dependency generation/checkpoint pending (runner must resolve SQLite native driver). No local npm network available in this environment; do not report tests as passed until CI runs.
+- Next: capture and commit independently generated Workbench lockfile; return CI to `npm ci`; run Node 20/22 API+DB+Workbench and existing Hulane suites; fix failures before PR is reviewable.

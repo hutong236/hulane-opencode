@@ -2,5 +2,16 @@
   "name": "@hulane/workbench-database",
   "private": true,
   "version": "0.1.0-dev",
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
+    "test": "tsx --test test/*.spec.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "11.10.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "7.6.13"
+  }
 }

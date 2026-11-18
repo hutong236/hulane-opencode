@@ -24,7 +24,14 @@ jobs:
           node-version: ${{ matrix.node }}
       - name: Install reproducible locked dependencies
         working-directory: workbench
-        run: npm ci --no-audit --no-fund
+        run: npm install --no-audit --no-fund
+      - name: Export generated dependency lock (temporary WB-002 bootstrap)
+        working-directory: workbench
+        shell: bash
+        run: |
+          printf 'WB002_LOCK_BEGIN\\n'
+          base64 -w0 package-lock.json
+          printf '\\nWB002_LOCK_END\\n'
       - name: Lint (source conflict markers and whitespace)
         working-directory: workbench
         run: npm run lint
