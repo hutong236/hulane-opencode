@@ -11,7 +11,7 @@ export interface RepositoryStatus {
   dirty: boolean;
 }
 
-/** Read-only status for a validated Git root. Never invoke a shell or inherit GIT_* overrides. */
+/** Read-only status for a validated Git root. Never invoke a shell, inherited GIT_* overrides, or repository-configured fsmonitor/hooks. */
 export async function readRepositoryStatus(input: string): Promise<RepositoryStatus> {
   const repoRoot = await validateRepositoryRoot(input);
   const env = { ...process.env };
@@ -19,7 +19,7 @@ export async function readRepositoryStatus(input: string): Promise<RepositorySta
     if (key.startsWith('GIT_')) delete env[key];
   }
   const run = async (...args: string[]) => {
-    const { stdout } = await execFileAsync('git', ['-C', repoRoot, ...args], {
+    const { stdout } = await execFileAsync('git', ['-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', '-C', repoRoot, ...args], {
       env, timeout: 5000, maxBuffer: 1024 * 1024,
     });
     return stdout.trim();

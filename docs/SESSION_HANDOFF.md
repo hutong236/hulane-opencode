@@ -433,3 +433,11 @@ npm test
 - Validation: local npm tests/typecheck **not run** in this GitHub API-only environment. Parent commit Workbench CI https://github.com/hutong236/hulane-opencode/actions/runs/44455078067 and Hulane CI https://github.com/hutong236/hulane-opencode/actions/runs/44455078059 succeeded; new commit CI must be checked separately. Real OpenCode CLI not exercised.
 - Concurrency: before write, repository Actions list showed 0 queued and 0 in-progress runs; recheck before updating ref.
 - Next independent task: check this commit's CI, then implement SQLite-backed `POST /api/projects` with dependency/lockfile, HTTP 201/400/409 and persistence regression tests.
+
+### WB-004 checkpoint — disable repository-configured Git fsmonitor execution (2026-11-19)
+
+- Branch: `feat/WB-004-repo-root-validation`; parent verified SHA `a4f0bef2b3bca02974ad7d5d04dcf84949ccafb6`. The remote ref after push is authoritative.
+- Scope: force `core.fsmonitor=false` and an inert hooks path for all read-only Git status commands, preventing an untrusted repository's fsmonitor executable from being launched during API status reads.
+- Regression: create a real Git repository with a configured fsmonitor shell script and assert status succeeds without creating the script's execution marker.
+- Validation: source/test authored through GitHub connector; local tests and typecheck **not run**. Parent Workbench CI #44502497069 and Hulane CI #44502497035 passed; new SHA CI must be checked independently. Real OpenCode CLI not exercised.
+- Next: check new CI; then implement SQLite-backed `POST /api/projects` with HTTP 201/400/409, durable registration and workspace dependency/lockfile updates. Issue #8 and production #3 remain open.
