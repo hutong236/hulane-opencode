@@ -415,3 +415,11 @@ npm test
 - Validation: source and test committed via GitHub API; local npm/typecheck/tests **not run** in this environment; Actions on the new commit must be checked before marking success. Real OpenCode CLI not exercised.
 - Risk: status snapshot is non-atomic if repository changes between Git invocations; API persistence and CRUD/UI still missing.
 - Next: inspect new CI, then implement POST /api/projects with SQLite and HTTP 400/409 tests.
+
+### WB-004 checkpoint — Fastify path safety boundary regression (2026-11-19)
+
+- Branch: `feat/WB-004-repo-root-validation`; parent remote SHA: `e6b1f455d9dfff2105d1c23452a72758586f79f4`.
+- Added `workbench/apps/api/test/project-path-guards.spec.ts` to assert that the real Fastify validation endpoint accepts a canonical Git root, rejects nested directories and symlink aliases (including paths beneath aliases) with HTTP 400, and never returns local paths in error responses.
+- Validation: test not run locally (GitHub API-only execution); CI for this new commit must be checked separately. The parent SHA's Workbench CI #44441483564 and Hulane CI #44441483557 succeeded; this is not evidence for the new test.
+- Concurrency preflight: repository Actions run listing showed no queued/in-progress jobs, including the scheduled autonomous-development workflow; verify again before any subsequent write.
+- Next: check new CI; then implement `POST /api/projects` with persistent SQLite registration and HTTP 400/409 regression tests. WB-004 and production acceptance #3 remain open.
