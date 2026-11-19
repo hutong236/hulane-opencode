@@ -448,3 +448,11 @@ npm test
 - Added regression for invalid path, duplicate registration and persistence across SQLite reopen. Updated API workspace dependency and lockfile.
 - Validation: local tests/typecheck **not run**; new commit CI **not yet verified**; real OpenCode CLI not exercised. Production Issue #3 remains open.
 - Next: inspect exact commit CI, fix failures before implementing project list/detail/delete API and UI.
+
+### WB-004 — CI TS2307 database declaration build-order repair (2026-11-19)
+
+- Isolated fix branch: `fix/WB-004-database-build-order-20261119`, based on WB-004 registration commit `2659fd40a1605a87cf883852d5d869db14047532` to avoid conflicting with the active automation branch.
+- Observed failed Workbench CI https://github.com/hutong236/hulane-opencode/actions/runs/44529026354 (Node 20 and 22): `src/app.ts` and `test/project-registration.spec.ts` TS2307 cannot resolve `@hulane/workbench-database` because package `types` points to `dist/index.d.ts`, which is absent before build.
+- Fix: root workbench `typecheck` and `build` scripts prebuild the database workspace, producing its published declaration/runtime outputs before dependent API checks and builds.
+- Parent Hulane CI https://github.com/hutong236/hulane-opencode/actions/runs/44529026378 marked failure with 5 successes and one cancelled macOS job; do not claim successful CI. This isolated fix has not been tested locally; new Actions must confirm it.
+- Next: inspect new fix PR CI; if green, integrate this fix into WB-004 safely after verifying concurrent writer state, then continue project list/detail/delete APIs and Web UI. Keep Issues #8 and #3 open.
