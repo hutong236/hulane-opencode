@@ -52,6 +52,11 @@ export class ProjectRepository {
     return this.db.prepare('SELECT * FROM projects ORDER BY created_at ASC, id ASC').all() as Project[];
   }
 
+  /** Remove only the registration row; never access the repository filesystem. */
+  delete(id: string): boolean {
+    return this.db.prepare('DELETE FROM projects WHERE id = ?').run(id).changes === 1;
+  }
+
   updateName(id: string, expectedRevision: number, name: string): Project | null {
     if (!name.trim()) throw new Error('Project name is required');
     const result = this.db.prepare(`
