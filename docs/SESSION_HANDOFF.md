@@ -406,3 +406,12 @@ npm test
 - Validation: source-level regression authored via GitHub connector; local `npm test` **not run** in this execution environment. Exact-commit Workbench/Hulane CI must be checked after push; never assume green.
 - Blockers: API `POST /api/projects` and CRUD/UI still missing; Issue #8 remains open. Production Issue #3 remains open.
 - Next atomic task: connect validated Git root with persistent project registration API, returning HTTP 400 for invalid input and HTTP 409 for duplicate roots, with Fastify inject tests.
+
+### WB-004 checkpoint — read-only real Git status (2026-11-18)
+
+- Branch: `feat/WB-004-repo-root-validation`; parent verified before edit: `2cceaf02e6807ed8118c20a477266f5e0bfe504e`.
+- Files: `workbench/apps/api/src/repository-status.ts`, `workbench/apps/api/test/repository-status.spec.ts`, this handoff.
+- Scope: read-only canonical-root Git status (HEAD SHA, branch including detached HEAD, dirty flag); no shell and no inherited GIT_* overrides. Regression covers clean/dirty/detached and nested-path rejection.
+- Validation: source and test committed via GitHub API; local npm/typecheck/tests **not run** in this environment; Actions on the new commit must be checked before marking success. Real OpenCode CLI not exercised.
+- Risk: status snapshot is non-atomic if repository changes between Git invocations; API persistence and CRUD/UI still missing.
+- Next: inspect new CI, then implement POST /api/projects with SQLite and HTTP 400/409 tests.
