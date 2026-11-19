@@ -441,3 +441,10 @@ npm test
 - Regression: create a real Git repository with a configured fsmonitor shell script and assert status succeeds without creating the script's execution marker.
 - Validation: source/test authored through GitHub connector; local tests and typecheck **not run**. Parent Workbench CI #44502497069 and Hulane CI #44502497035 passed; new SHA CI must be checked independently. Real OpenCode CLI not exercised.
 - Next: check new CI; then implement SQLite-backed `POST /api/projects` with HTTP 201/400/409, durable registration and workspace dependency/lockfile updates. Issue #8 and production #3 remain open.
+
+### WB-004 — SQLite project registration checkpoint (2026-11-19)
+
+- Added POST /api/projects with canonical Git-root validation, HTTP 201/400/409, SQLite uniqueness handling and lazy database lifecycle.
+- Added regression for invalid path, duplicate registration and persistence across SQLite reopen. Updated API workspace dependency and lockfile.
+- Validation: local tests/typecheck **not run**; new commit CI **not yet verified**; real OpenCode CLI not exercised. Production Issue #3 remains open.
+- Next: inspect exact commit CI, fix failures before implementing project list/detail/delete API and UI.

@@ -1,10 +1,35 @@
 import Fastify from 'fastify';
+import { WorkbenchDatabase } from '@hulane/workbench-database';
 import { validateRepositoryRoot } from './repository-root.js';
 import { readRepositoryStatus } from './repository-status.js';
 
 /** Build an application without opening a socket, so tests can use inject(). */
-export function buildApp() {
+export function buildApp(options: { database?: WorkbenchDatabase } = {}) {
   const app = Fastify({ logger: true });
+  let ownedDatabase: WorkbenchDatabase | undefined;
+  const database = () => options.database ?? (ownedDatabase ??= new WorkbenchDatabase());
+  app.addHook('onClose', async () => { ownedDatabase?.close(); });
+  app.post<{ Body: { path?: string; slug?: string; name?: string } }>('/api/projects', async (request, reply) => {
+    const body = request.body;
+    if (typeof body?.path !== 'string' || typeof body.slug !== 'string' ||
+        !/^[a-z0-9][a-z0-9-]{1,63}$/.test(body.slug) ||
+        typeof body.name !== 'string' || !body.name.trim()) {
+      return reply.code(400).send({ error: 'Invalid project registration' });
+    }
+    let repoRoot: string;
+    try { repoRoot = await validateRepositoryRoot(body.path); }
+    catch { return reply.code(400).send({ error: 'Invalid Git repository root' }); }
+    try {
+      const projects = database().projects;
+      if (projects.findByRoot(repoRoot)) return reply.code(409).send({ error: 'Repository already registered' });
+      return reply.code(201).send(projects.create({ slug: body.slug, name: body.name, repoRoot }));
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('UNIQUE constraint failed')) {
+        return reply.code(409).send({ error: 'Project already registered' });
+      }
+      throw error;
+    }
+  });
   app.get('/api/health', async () => ({ status: 'ok', service: 'hulane-workbench-api' }));
   app.post<{ Body: { path?: string } }>('/api/projects/validate', async (request, reply) => {
     if (typeof request.body?.path !== 'string') {
