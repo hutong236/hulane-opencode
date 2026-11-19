@@ -423,3 +423,13 @@ npm test
 - Validation: test not run locally (GitHub API-only execution); CI for this new commit must be checked separately. The parent SHA's Workbench CI #44441483564 and Hulane CI #44441483557 succeeded; this is not evidence for the new test.
 - Concurrency preflight: repository Actions run listing showed no queued/in-progress jobs, including the scheduled autonomous-development workflow; verify again before any subsequent write.
 - Next: check new CI; then implement `POST /api/projects` with persistent SQLite registration and HTTP 400/409 regression tests. WB-004 and production acceptance #3 remain open.
+
+
+### WB-004 checkpoint — read-only Git status HTTP endpoint (2026-11-19)
+
+- Branch: `feat/WB-004-repo-root-validation`; parent remote SHA: `29a30f07e84c09c269a89497c228117216a3a3ee` (new remote SHA must be verified from the branch after push).
+- Changed: `workbench/apps/api/src/app.ts`, `workbench/apps/api/test/project-status-api.spec.ts`, and this handoff.
+- Acceptance: `POST /api/projects/status` returns actual HEAD SHA, branch and dirty state for a validated Git root; malformed, nested and missing paths fail HTTP 400 without leaking filesystem paths; detached HEAD is represented by a null branch.
+- Validation: local npm tests/typecheck **not run** in this GitHub API-only environment. Parent commit Workbench CI https://github.com/hutong236/hulane-opencode/actions/runs/44455078067 and Hulane CI https://github.com/hutong236/hulane-opencode/actions/runs/44455078059 succeeded; new commit CI must be checked separately. Real OpenCode CLI not exercised.
+- Concurrency: before write, repository Actions list showed 0 queued and 0 in-progress runs; recheck before updating ref.
+- Next independent task: check this commit's CI, then implement SQLite-backed `POST /api/projects` with dependency/lockfile, HTTP 201/400/409 and persistence regression tests.
