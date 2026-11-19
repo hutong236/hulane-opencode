@@ -30,6 +30,16 @@ export function buildApp(options: { database?: WorkbenchDatabase } = {}) {
       throw error;
     }
   });
+  // Return only persisted registration metadata; never touch or delete the repository.
+  app.get<{ Params: { id: string } }>('/api/projects/:id', async (request, reply) => {
+    const id = request.params.id;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      return reply.code(400).send({ error: 'Invalid project ID' });
+    }
+    const project = database().projects.find(id);
+    if (!project) return reply.code(404).send({ error: 'Project not found' });
+    return project;
+  });
   app.get('/api/health', async () => ({ status: 'ok', service: 'hulane-workbench-api' }));
   app.post<{ Body: { path?: string } }>('/api/projects/validate', async (request, reply) => {
     if (typeof request.body?.path !== 'string') {

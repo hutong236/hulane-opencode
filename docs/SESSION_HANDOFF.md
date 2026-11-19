@@ -456,3 +456,11 @@ npm test
 - Fix: root workbench `typecheck` and `build` scripts prebuild the database workspace, producing its published declaration/runtime outputs before dependent API checks and builds.
 - Parent Hulane CI https://github.com/hutong236/hulane-opencode/actions/runs/44529026378 marked failure with 5 successes and one cancelled macOS job; do not claim successful CI. This isolated fix has not been tested locally; new Actions must confirm it.
 - Next: inspect new fix PR CI; if green, integrate this fix into WB-004 safely after verifying concurrent writer state, then continue project list/detail/delete APIs and Web UI. Keep Issues #8 and #3 open.
+
+### WB-004 — project detail endpoint checkpoint (2026-11-19)
+
+- Isolated branch: `feat/WB-004-project-detail-20261119`, parent `b9b6f972dd0b1b454c3acaa09003495ca6257702` (PR #40 CI-green build-order repair).
+- Scope: add `GET /api/projects/:id` for persisted project metadata with UUID input guard, HTTP 200/400/404 and no filesystem paths in errors. No repository mutation.
+- Regression: Fastify inject test registers a real temporary Git repository, checks exact stored record, malformed ID and missing ID.
+- Validation: local npm tests/typecheck **not run** in GitHub API-only environment; CI on the new commit is pending until verified. Parent PR #40 Workbench CI #44539518268 and Hulane CI #44539518237 succeeded; real OpenCode CLI not exercised.
+- Next: inspect exact new commit CI, then implement project listing and deletion of registration without deleting Git files. Do not close Issues #8/#3 or merge production.
