@@ -5,6 +5,7 @@ import {
 } from 'antd';
 import type { MenuProps } from 'antd';
 import { getHealth, type ApiHealth } from './api/client';
+import { ProjectList } from './components/ProjectList';
 import { ConfirmAction } from './components/UiPrimitives';
 import { sections, getSection, isSection, defaultSection, type Section } from './routes';
 
@@ -101,7 +102,7 @@ function WorkbenchShell() {
           <Paragraph type="secondary">{section.description}</Paragraph>
           {health.status === 'error' && <Alert type="error" showIcon message="API 连接失败" className="app-alert"
             description={<div><p>{health.error}</p><Button onClick={health.retry}>重试连接</Button></div>} />}
-          {section.path === '/settings' ? <Card title="本地外观设置">
+          {section.path === '/projects' ? <ProjectList /> : section.path === '/settings' ? <Card title="本地外观设置">
             <Form form={settingsForm} layout="vertical" initialValues={{ dark }} onFinish={(values: { dark: boolean }) => {
               setDark(values.dark);
               void messageApi.success('外观已保存到当前浏览器');
