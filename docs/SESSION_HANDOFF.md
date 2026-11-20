@@ -510,3 +510,14 @@ npm test
 - Validation: local `npm test --workspace @hulane/workbench-web` and typecheck NOT RUN (GitHub connector has no local Node environment). Parent CI: Workbench 44649896984 and Hulane 44649896991 passed. New CI pending verification.
 - Risk: HTTP client regression only, not DOM/browser smoke or real OpenCode CLI. No production Gate approval.
 - Next: inspect new CI and add browser smoke covering loading, empty, failure, retry and stale request cancellation.
+
+
+### WB-004 checkpoint — project list malformed-response recovery regression (2026-11-20)
+
+- Step: Add two deterministic request-level regression tests: HTTP 200 malformed JSON must reject without poisoning the next valid retry; transport failure messages must not expose the underlying exception's sensitive text.
+- Branch: `test/WB-004-project-list-failure-recovery-20261120` (isolated from `test/WB-004-project-list-request-20261120-0304`).
+- Code commit before this handoff: `c191adec29e630e0bd37f1f09459db950e564b96`; authoritative final SHA is the remote branch HEAD.
+- Files: `workbench/apps/web/test/project-list-request.spec.ts`, `docs/SESSION_HANDOFF.md`.
+- Validation: Parent commit Workbench CI runs 44665278910 / 44665269707 and Hulane CI 44665278893 succeeded. New commit tests, typecheck, browser Smoke and real OpenCode CLI are **not run locally**; new Actions results must be inspected before claiming success.
+- Risk / blocker: These are HTTP-client regressions, **not** real browser interaction tests. No production Gate A/B/C verification. Issue #8 and Issue #3 stay open.
+- Next step: Inspect this branch's CI; then add browser-level loading/empty/error/retry/cancellation coverage with an actual browser runner, without weakening Hulane Gate.
