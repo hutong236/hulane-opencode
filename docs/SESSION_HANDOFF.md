@@ -353,3 +353,160 @@ npm test
 
 - [Workbench CI 44231934598](https://github.com/hutong236/hulane-opencode/actions/runs/44231934598) previous HEAD `bc083e8af61ff0619e9af8069c4063cf867abdf5`: 4 existing Playwright tests passed, new confirmation test failed at a role/name locator for the Cancel action; actual confirmation title was visible. Node 20 passed, Node 22 test exit failed.
 - Replace locale-sensitive accessible-name selector with scoped `.ant-popconfirm-buttons button` DOM selection and assert both controls exist. New CI must verify cancel and confirm behavior. Hulane production gate #3 unchanged.
+
+
+### WB-004 — Canonical Git repository root validation (2026-11-18)
+
+- Branch: `feat/WB-004-repo-root-validation`; parent `b908c34f0f1a596ec15342e59e96435014526bd3`; authoritative SHA is the verified remote HEAD.
+- Scope: reusable fail-closed registration boundary: absolute path, no symlink components, real Git worktree root, Git invoked without a shell.
+- Regression: temporary Git root, nested directory, non-Git directory, relative path and symlink alias.
+- Validation: connector-only source changes; local npm/tsx tests **not run**. Check exact-SHA Actions before claiming success. Issue #8 CRUD/UI remain incomplete.
+- Next: check CI, then integrate validation and duplicate detection into project registration. Production Issue #3 remains open.
+
+### WB-004 — Fail-closed Git worktree and environment isolation (2026-11-18)
+
+- Branch: `feat/WB-004-repo-root-validation`; parent `f0c9b3b3de73a3a14226bbd3aaecda7399ad8d88`; current remote HEAD must be checked after push.
+- Scope: reject bare repositories, require `--is-inside-work-tree=true`, and strip inherited Git location overrides before subprocess validation.
+- Regression: bare repository and hostile `GIT_DIR` redirect; retain existing canonical/nested/symlink tests.
+- Validation: connector-only edit; local tests **not run**. Previous parent Workbench CI 44235079874 and Hulane CI 44235079936 passed; new SHA requires its own CI evidence.
+- Risk: project registration CRUD/UI and duplicate-path persistence remain incomplete; Issue #8 stays open.
+- Next: wire validated canonical root into project registration and add duplicate registration rejection tests; no production Gate approval (#3).
+
+### WB-004 — Git root pre-registration API boundary (2026-11-18)
+
+- Branch: `feat/WB-004-repo-root-validation`; parent `671b1774482b33df79eb3a9f0f9a2a34a5daa752`; authoritative commit SHA is remote branch HEAD after push.
+- Scope: `POST /api/projects/validate` uses canonical Git root validator; rejects missing/non-string and invalid paths with HTTP 400, without returning local Git stderr or rejected paths.
+- Regression: Fastify inject test for real temporary Git repository, non-Git directory, relative path and invalid body types.
+- Validation: connector-only code change; local tests **not run**. Parent Workbench CI 44247948169 and Hulane CI 44247948168 succeeded; new SHA CI must be checked independently. Real OpenCode CLI not exercised.
+- Risk: this endpoint validates only; it does not persist registrations or implement CRUD/UI. Issue #8 and production Issue #3 remain open.
+- Next: implement atomic database-backed registration with canonical root uniqueness and duplicate rejection, then connect UI.
+
+### WB-004 — Persistent repository-root uniqueness regression (2026-11-18)
+
+- Branch: `feat/WB-004-repo-root-validation`; parent `83ec0ea5886bee669288ac083936ec73a7d9ee21`; latest SHA is the verified remote branch HEAD.
+- Scope: add `ProjectRepository.findByRoot` for canonical-root lookup; retain SQLite `repo_root UNIQUE` as the authoritative atomic duplicate guard.
+- Regression: two distinct slugs cannot register the same root; lookup and duplicate rejection persist after database close/reopen; failed registration leaves one record.
+- Validation: GitHub connector-only source edit; local `npm test` **not run**. Check exact new SHA Workbench CI and Hulane CI before claiming pass. No real OpenCode CLI exercised.
+- Limitation: the API registration endpoint is not yet connected to this repository, and path canonicalization must occur before calling `create`; Issue #8 stays open.
+- Next: add `POST /api/projects` backed by `validateRepositoryRoot` and `WorkbenchDatabase.projects.create`, map SQLite uniqueness errors to HTTP 409, and test API persistence and duplicate requests. Production Issue #3 remains open.
+
+### WB-004 — Git environment override hardening (2026-11-18)
+
+- Branch: `feat/WB-004-repo-root-validation`; parent `38b5d712bc166b1fc46d6351df6cc87b4755dea6`; authoritative SHA is remote branch HEAD after push.
+- Scope: strip all inherited `GIT_*` variables before running Git root validation, including injected `GIT_CONFIG_*` and alternate object directories; preserve non-Git process environment.
+- Regression: a real temporary Git repository remains valid despite hostile `GIT_CONFIG_COUNT` / `core.bare` and `GIT_OBJECT_DIRECTORY` overrides.
+- Validation: connector-only code change; local tests **not run**. Exact new SHA CI must be checked after push; real OpenCode CLI not exercised.
+- Next: implement `POST /api/projects` using canonical root validation and SQLite persistence, map duplicate registration to HTTP 409, and add Fastify API regression. Issue #8 and production Issue #3 remain open.
+
+### WB-004 — Cross-connection duplicate-root regression (2026-11-18)
+
+- Branch: `feat/WB-004-repo-root-validation`; parent `ad0dfcf1a76531300ce3b9efe07a13270cc04611`; authoritative SHA is the remote branch HEAD after push.
+- Files: `workbench/packages/database/test/project-root-concurrency.spec.ts`, `docs/SESSION_HANDOFF.md`.
+- Acceptance: two independent SQLite connections see the same registered canonical root; a second slug cannot register it; exactly one row survives reopen.
+- Validation: source-level regression authored via GitHub connector; local `npm test` **not run** in this execution environment. Exact-commit Workbench/Hulane CI must be checked after push; never assume green.
+- Blockers: API `POST /api/projects` and CRUD/UI still missing; Issue #8 remains open. Production Issue #3 remains open.
+- Next atomic task: connect validated Git root with persistent project registration API, returning HTTP 400 for invalid input and HTTP 409 for duplicate roots, with Fastify inject tests.
+
+### WB-004 checkpoint — read-only real Git status (2026-11-18)
+
+- Branch: `feat/WB-004-repo-root-validation`; parent verified before edit: `2cceaf02e6807ed8118c20a477266f5e0bfe504e`.
+- Files: `workbench/apps/api/src/repository-status.ts`, `workbench/apps/api/test/repository-status.spec.ts`, this handoff.
+- Scope: read-only canonical-root Git status (HEAD SHA, branch including detached HEAD, dirty flag); no shell and no inherited GIT_* overrides. Regression covers clean/dirty/detached and nested-path rejection.
+- Validation: source and test committed via GitHub API; local npm/typecheck/tests **not run** in this environment; Actions on the new commit must be checked before marking success. Real OpenCode CLI not exercised.
+- Risk: status snapshot is non-atomic if repository changes between Git invocations; API persistence and CRUD/UI still missing.
+- Next: inspect new CI, then implement POST /api/projects with SQLite and HTTP 400/409 tests.
+
+### WB-004 checkpoint — Fastify path safety boundary regression (2026-11-19)
+
+- Branch: `feat/WB-004-repo-root-validation`; parent remote SHA: `e6b1f455d9dfff2105d1c23452a72758586f79f4`.
+- Added `workbench/apps/api/test/project-path-guards.spec.ts` to assert that the real Fastify validation endpoint accepts a canonical Git root, rejects nested directories and symlink aliases (including paths beneath aliases) with HTTP 400, and never returns local paths in error responses.
+- Validation: test not run locally (GitHub API-only execution); CI for this new commit must be checked separately. The parent SHA's Workbench CI #44441483564 and Hulane CI #44441483557 succeeded; this is not evidence for the new test.
+- Concurrency preflight: repository Actions run listing showed no queued/in-progress jobs, including the scheduled autonomous-development workflow; verify again before any subsequent write.
+- Next: check new CI; then implement `POST /api/projects` with persistent SQLite registration and HTTP 400/409 regression tests. WB-004 and production acceptance #3 remain open.
+
+
+### WB-004 checkpoint — read-only Git status HTTP endpoint (2026-11-19)
+
+- Branch: `feat/WB-004-repo-root-validation`; parent remote SHA: `29a30f07e84c09c269a89497c228117216a3a3ee` (new remote SHA must be verified from the branch after push).
+- Changed: `workbench/apps/api/src/app.ts`, `workbench/apps/api/test/project-status-api.spec.ts`, and this handoff.
+- Acceptance: `POST /api/projects/status` returns actual HEAD SHA, branch and dirty state for a validated Git root; malformed, nested and missing paths fail HTTP 400 without leaking filesystem paths; detached HEAD is represented by a null branch.
+- Validation: local npm tests/typecheck **not run** in this GitHub API-only environment. Parent commit Workbench CI https://github.com/hutong236/hulane-opencode/actions/runs/44455078067 and Hulane CI https://github.com/hutong236/hulane-opencode/actions/runs/44455078059 succeeded; new commit CI must be checked separately. Real OpenCode CLI not exercised.
+- Concurrency: before write, repository Actions list showed 0 queued and 0 in-progress runs; recheck before updating ref.
+- Next independent task: check this commit's CI, then implement SQLite-backed `POST /api/projects` with dependency/lockfile, HTTP 201/400/409 and persistence regression tests.
+
+### WB-004 checkpoint — disable repository-configured Git fsmonitor execution (2026-11-19)
+
+- Branch: `feat/WB-004-repo-root-validation`; parent verified SHA `a4f0bef2b3bca02974ad7d5d04dcf84949ccafb6`. The remote ref after push is authoritative.
+- Scope: force `core.fsmonitor=false` and an inert hooks path for all read-only Git status commands, preventing an untrusted repository's fsmonitor executable from being launched during API status reads.
+- Regression: create a real Git repository with a configured fsmonitor shell script and assert status succeeds without creating the script's execution marker.
+- Validation: source/test authored through GitHub connector; local tests and typecheck **not run**. Parent Workbench CI #44502497069 and Hulane CI #44502497035 passed; new SHA CI must be checked independently. Real OpenCode CLI not exercised.
+- Next: check new CI; then implement SQLite-backed `POST /api/projects` with HTTP 201/400/409, durable registration and workspace dependency/lockfile updates. Issue #8 and production #3 remain open.
+
+### WB-004 — SQLite project registration checkpoint (2026-11-19)
+
+- Added POST /api/projects with canonical Git-root validation, HTTP 201/400/409, SQLite uniqueness handling and lazy database lifecycle.
+- Added regression for invalid path, duplicate registration and persistence across SQLite reopen. Updated API workspace dependency and lockfile.
+- Validation: local tests/typecheck **not run**; new commit CI **not yet verified**; real OpenCode CLI not exercised. Production Issue #3 remains open.
+- Next: inspect exact commit CI, fix failures before implementing project list/detail/delete API and UI.
+
+### WB-004 — CI TS2307 database declaration build-order repair (2026-11-19)
+
+- Isolated fix branch: `fix/WB-004-database-build-order-20261119`, based on WB-004 registration commit `2659fd40a1605a87cf883852d5d869db14047532` to avoid conflicting with the active automation branch.
+- Observed failed Workbench CI https://github.com/hutong236/hulane-opencode/actions/runs/44529026354 (Node 20 and 22): `src/app.ts` and `test/project-registration.spec.ts` TS2307 cannot resolve `@hulane/workbench-database` because package `types` points to `dist/index.d.ts`, which is absent before build.
+- Fix: root workbench `typecheck` and `build` scripts prebuild the database workspace, producing its published declaration/runtime outputs before dependent API checks and builds.
+- Parent Hulane CI https://github.com/hutong236/hulane-opencode/actions/runs/44529026378 marked failure with 5 successes and one cancelled macOS job; do not claim successful CI. This isolated fix has not been tested locally; new Actions must confirm it.
+- Next: inspect new fix PR CI; if green, integrate this fix into WB-004 safely after verifying concurrent writer state, then continue project list/detail/delete APIs and Web UI. Keep Issues #8 and #3 open.
+
+### WB-004 — project detail endpoint checkpoint (2026-11-19)
+
+- Isolated branch: `feat/WB-004-project-detail-20261119`, parent `b9b6f972dd0b1b454c3acaa09003495ca6257702` (PR #40 CI-green build-order repair).
+- Scope: add `GET /api/projects/:id` for persisted project metadata with UUID input guard, HTTP 200/400/404 and no filesystem paths in errors. No repository mutation.
+- Regression: Fastify inject test registers a real temporary Git repository, checks exact stored record, malformed ID and missing ID.
+- Validation: local npm tests/typecheck **not run** in GitHub API-only environment; CI on the new commit is pending until verified. Parent PR #40 Workbench CI #44539518268 and Hulane CI #44539518237 succeeded; real OpenCode CLI not exercised.
+- Next: inspect exact new commit CI, then implement project listing and deletion of registration without deleting Git files. Do not close Issues #8/#3 or merge production.
+
+
+### WB-004 — SQLite project list API (2026-11-19)
+- Branch: `feat/WB-004-project-list-20261119`; parent: `e875f6cca87b88557432a5cbb8a4b49f71dbc04b`; Draft PR follows branch creation.
+- Acceptance: GET /api/projects returns 200 with an empty array or persisted project metadata in deterministic created_at/id order; no filesystem/Git access during listing.
+- Changed: database ProjectRepository.list(), Fastify GET route, new project-list.spec.ts regression, this handoff.
+- Validation: GitHub connector-only edit; local npm test/typecheck **not run**; new SHA CI must be checked after push. Parent SHA Workbench CI 44560530322 and Hulane CI 44560530218 both succeeded. Real OpenCode CLI not exercised.
+- Risk: list currently unpaginated; project registry UI and safe unregister remain outstanding. Issue #8 and production Issue #3 remain open.
+- Next atomic task: check new SHA CI and repair any failures; otherwise implement safe project unregister without deleting repository files.
+
+
+### WB-004 — SQLite-only safe project unregister (2026-11-19)
+
+- Isolated branch: `feat/WB-004-safe-unregister-20261119-2005`, based on verified list endpoint SHA `955ea6a53a2970e87977f10eda9c3b3018f6e575`; no writes to existing development branches.
+- Scope: `DELETE /api/projects/:id` with UUID guard, 204 on successful unregister, 400 for malformed IDs and 404 for missing IDs; `ProjectRepository.delete` executes only `DELETE FROM projects WHERE id = ?` in SQLite.
+- Regression: `project-unregister.spec.ts` registers a real temporary Git repository, checks 204/400/404, absence of registration after deletion, preservation of `.git` and a user marker file, and no filesystem path in errors.
+- Validation: source/test authored via GitHub connector; local npm test/typecheck **not run**. Parent list SHA Workbench CI #44572313223 and Hulane CI #44572313392 completed successfully; new SHA CI must be checked independently. Real OpenCode CLI not exercised.
+- Concurrency: this change is isolated on a newly named branch; no writes to main or active half-hour automation branches. Repository-wide active Actions cannot be conclusively enumerated through this connector.
+- Risk: UI, live health status and full WB-004 acceptance remain outstanding; Issue #8 and production Issue #3 remain open.
+- Next: inspect this branch's exact CI and fix failures first, then implement project management Web UI and real Git health display.
+
+
+### WB-004 — Strict project list client contract (2026-11-19)
+- Branch: `feat/WB-004-project-client-20261119-2359`; isolated from all existing development and scheduler branches; parent `0a17b2156cf24ff1bb0baf6ab0586fe379855549`.
+- Code: `getProjects` uses existing same-origin `requestJson`; `decodeProjectList` checks envelope, record fields, UUID, absolute repository root, nonnegative integer revision, and duplicate IDs before rendering.
+- Regression: `project-list-client.spec.ts` checks empty/valid responses and malformed/duplicate data.
+- Validation: GitHub connector writes only; local `npm test`, `npm run typecheck`, browser smoke, and real OpenCode CLI **not run**. Parent Workbench CI #44605266143 and Hulane CI #44605266115 succeeded; new SHA CI pending verification.
+- Concurrency: new isolated branch only; connector cannot fully enumerate scheduled half-hour Actions jobs. No write to `main` or shared feature branches.
+- Risk: project UI not yet connected, project status UI and complete WB-004 acceptance outstanding. Issues #8 and #3 remain open.
+- Next atomic task: inspect exact-commit CI and fix failures; then add project list loading/empty/error/retry UI.
+
+
+### WB-004 — project list UI states (2026-11-20)
+- Branch: `feat/WB-004-project-list-ui-20261120-0056`; parent verified `03e699f1e373d4b873d1e6725cc3a1facf1fc5ad` (remote branch SHA after push is authoritative).
+- Scope: connect /projects to validated getProjects() with loading, empty, error/retry, and read-only project table. Abort stale requests on unmount/retry.
+- Validation: parent Workbench CI #44642346340 and Hulane CI #44642346203 succeeded; this commit's CI pending. Local tests/typecheck/browser smoke and real OpenCode CLI not run in connector-only environment.
+- Risks: registration, details, unregister, and live Git status Web controls remain unimplemented; no production acceptance. Issues #8 and #3 stay open.
+- Next: inspect exact new SHA CI; fix any failures, then add browser UI regression/smoke for loading/empty/error/retry.
+
+### WB-004 — HTTP request regression (2026-11-20)
+
+- Branch: `test/WB-004-project-list-request-20261120-0304`, parent `a3e286236d0fcc5df7b525cc1e7a6fba61e37bd3`; authoritative new SHA is remote branch HEAD.
+- Change: `workbench/apps/web/test/project-list-request.spec.ts` tests 503 then retry/empty result, AbortError propagation, malformed response rejection.
+- Validation: local `npm test --workspace @hulane/workbench-web` and typecheck NOT RUN (GitHub connector has no local Node environment). Parent CI: Workbench 44649896984 and Hulane 44649896991 passed. New CI pending verification.
+- Risk: HTTP client regression only, not DOM/browser smoke or real OpenCode CLI. No production Gate approval.
+- Next: inspect new CI and add browser smoke covering loading, empty, failure, retry and stale request cancellation.
