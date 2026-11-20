@@ -31,17 +31,21 @@ test('project list shows loading then registered project metadata', async ({ pag
 });
 
 test('empty project list is explicit and refresh loads a new registration', async ({ page }) => {
+  let refreshed = false;
   let count = 0;
   await page.route('**/api/projects', route => {
     count++;
     return route.fulfill({ status: 200, contentType: 'application/json',
-      body: JSON.stringify({ projects: count <= 2 ? [] : [project] }) });
+      body: JSON.stringify({ projects: refreshed ? [project] : [] }) });
   });
   await page.goto('/projects');
   await expect(page.getByText('尚未登记项目')).toBeVisible();
-  await page.getByRole('button', { name: '刷新' }).click();
+  // Target the Card's refresh action without depending on AntD's accessible-name
+  // composition; StrictMode may make one or two initial requests.
+  refreshed = true;
+  await page.locator('.ant-card-extra button').click();
   await expect(page.getByRole('cell', { name: 'CMDB', exact: true }).first()).toBeVisible();
-  expect(count).toBeGreaterThanOrEqual(3);
+  expect(count).toBeGreaterThanOrEqual(2);
 });
 
 test('project list HTTP failure has a retry action and recovers', async ({ page }) => {
