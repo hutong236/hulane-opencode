@@ -484,3 +484,13 @@ npm test
 - Concurrency: this change is isolated on a newly named branch; no writes to main or active half-hour automation branches. Repository-wide active Actions cannot be conclusively enumerated through this connector.
 - Risk: UI, live health status and full WB-004 acceptance remain outstanding; Issue #8 and production Issue #3 remain open.
 - Next: inspect this branch's exact CI and fix failures first, then implement project management Web UI and real Git health display.
+
+
+### WB-004 — Strict project list client contract (2026-11-19)
+- Branch: `feat/WB-004-project-client-20261119-2359`; isolated from all existing development and scheduler branches; parent `0a17b2156cf24ff1bb0baf6ab0586fe379855549`.
+- Code: `getProjects` uses existing same-origin `requestJson`; `decodeProjectList` checks envelope, record fields, UUID, absolute repository root, nonnegative integer revision, and duplicate IDs before rendering.
+- Regression: `project-list-client.spec.ts` checks empty/valid responses and malformed/duplicate data.
+- Validation: GitHub connector writes only; local `npm test`, `npm run typecheck`, browser smoke, and real OpenCode CLI **not run**. Parent Workbench CI #44605266143 and Hulane CI #44605266115 succeeded; new SHA CI pending verification.
+- Concurrency: new isolated branch only; connector cannot fully enumerate scheduled half-hour Actions jobs. No write to `main` or shared feature branches.
+- Risk: project UI not yet connected, project status UI and complete WB-004 acceptance outstanding. Issues #8 and #3 remain open.
+- Next atomic task: inspect exact-commit CI and fix failures; then add project list loading/empty/error/retry UI.
