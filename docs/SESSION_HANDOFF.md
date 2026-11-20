@@ -502,3 +502,11 @@ npm test
 - Validation: parent Workbench CI #44642346340 and Hulane CI #44642346203 succeeded; this commit's CI pending. Local tests/typecheck/browser smoke and real OpenCode CLI not run in connector-only environment.
 - Risks: registration, details, unregister, and live Git status Web controls remain unimplemented; no production acceptance. Issues #8 and #3 stay open.
 - Next: inspect exact new SHA CI; fix any failures, then add browser UI regression/smoke for loading/empty/error/retry.
+
+### WB-004 — HTTP request regression (2026-11-20)
+
+- Branch: `test/WB-004-project-list-request-20261120-0304`, parent `a3e286236d0fcc5df7b525cc1e7a6fba61e37bd3`; authoritative new SHA is remote branch HEAD.
+- Change: `workbench/apps/web/test/project-list-request.spec.ts` tests 503 then retry/empty result, AbortError propagation, malformed response rejection.
+- Validation: local `npm test --workspace @hulane/workbench-web` and typecheck NOT RUN (GitHub connector has no local Node environment). Parent CI: Workbench 44649896984 and Hulane 44649896991 passed. New CI pending verification.
+- Risk: HTTP client regression only, not DOM/browser smoke or real OpenCode CLI. No production Gate approval.
+- Next: inspect new CI and add browser smoke covering loading, empty, failure, retry and stale request cancellation.
