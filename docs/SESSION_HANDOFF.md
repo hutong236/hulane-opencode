@@ -583,3 +583,13 @@ npm test
 - Validation: GitHub Git Trees API confirmed PR #51 base tree contains 274 entries and defective PR #52 tree only 10; restored tree must be verified remotely after push. Local npm/typecheck/Playwright not run. CI pending; real OpenCode CLI not run.
 - Risk: Do not treat the prior commit as a buildable full checkout. Production Gate remains unverified.
 - Next: Inspect PR #52 Workbench/Hulane CI and fix any failures; then implement registration form and project list refresh.
+
+
+### WB-004 — Web registration form and list refresh (2026-11-20)
+- Branch: `feat/WB-004-registration-client-20261120`; parent remote SHA `e68213e47ed133c200f47868ee0723a76d214a0f` (new HEAD is authoritative after push).
+- Files: `workbench/apps/web/src/components/ProjectList.tsx`, `docs/SESSION_HANDOFF.md`.
+- Acceptance: project form accepts absolute path, slug and name; calls existing same-origin `registerProject`; prevents duplicate in-flight submit; shows sanitized 400/409 errors; resets form and reloads persisted list on success; aborts pending request on unmount.
+- Validation: source review only in GitHub API environment; npm, TypeScript, Playwright and real OpenCode CLI not executed. Prior Workbench CI #44788480278 passed, Hulane CI #44788480158 failed due to cancelled macOS smoke job; new commit CI must be checked separately.
+- Concurrency: repository Actions queue and in-progress runs were both zero before write (GitHub REST repository Actions collection).
+- Risk: browser E2E for registration and real Git health status still missing; Issue #8 and production Issue #3 remain open.
+- Next: inspect exact new SHA CI; fix failures first, then add Playwright registration/error/list refresh coverage and Git health status.
