@@ -574,3 +574,12 @@ npm test
 - Validation: new Node test cases added for success, invalid input, HTTP 400/409, malformed response and abort. No local npm or real OpenCode CLI execution in this API session; exact new commit's CI must be checked after push.
 - Risk: registration UI and live Git health status are not yet wired. Issue #8 and production Issue #3 remain open.
 - Next atomic task: add project registration form to ProjectList, show safe validation failures and refresh persisted list, with browser E2E.
+
+### WB-004 checkpoint — 2026-11-20: repair incomplete Git tree
+
+- Step: Restore the complete inherited repository tree on PR #52; the prior commit `b7fdcfbabfcaa6f474128cc875de5ed7186eb50c` accidentally used a root tree containing only 10 entries, omitting AGENTS.md, package manifests and most source files.
+- Branch: `feat/WB-004-registration-client-20261120`; parent: `b7fdcfbabfcaa6f474128cc875de5ed7186eb50c`.
+- Files: repository tree restored from parent PR #51 tree `78687d196cd8ceaf7ded0929a6e1f55affcf6e19`, preserving PR #52 registration client and test blobs; this handoff entry records the correction.
+- Validation: GitHub Git Trees API confirmed PR #51 base tree contains 274 entries and defective PR #52 tree only 10; restored tree must be verified remotely after push. Local npm/typecheck/Playwright not run. CI pending; real OpenCode CLI not run.
+- Risk: Do not treat the prior commit as a buildable full checkout. Production Gate remains unverified.
+- Next: Inspect PR #52 Workbench/Hulane CI and fix any failures; then implement registration form and project list refresh.

@@ -1,0 +1,88 @@
+name: Workbench autonomous development
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+concurrency:
+  group: workbench-autodev
+  cancel-in-progress: false
+permissions:
+  contents: read
+
+jobs:
+  implement:
+    if: github.repository == 'hutong236/hulane-opencode'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify issue selection and safety logic
+        run: node --test test/workbench-autodev.test.mjs
+      - name: Require credentials matching the selected model provider
+        id: configured
+        env:
+          MODEL: ${{ vars.WORKBENCH_AUTODEV_MODEL }}
+          OPENAI_API_KEY: ${{ secrets.WORKBENCH_OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.WORKBENCH_ANTHROPIC_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.WORKBENCH_DEEPSEEK_API_KEY }}
+          WRITE_TOKEN: ${{ secrets.WORKBENCH_AUTODEV_TOKEN }}
+        run: node bin/workbench-provider.mjs
+      - name: Select one ready Issue or failing PR
+        if: steps.configured.outputs.enabled == 'true'
+        id: select
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node bin/workbench-autodev.mjs select
+      - name: Create or restore issue branch
+        if: steps.select.outputs.action == 'new' || steps.select.outputs.action == 'repair'
+        env:
+          BRANCH: ${{ steps.select.outputs.branch }}
+          MODE: ${{ steps.select.outputs.action }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp bin/workbench-autodev.mjs "$RUNNER_TEMP/workbench-runner.mjs"
+          if [ "$MODE" = repair ]; then
+            git fetch origin "$BRANCH"
+            git switch -c "$BRANCH" "origin/$BRANCH"
+          else
+            if git ls-remote --exit-code --heads origin "$BRANCH"; then
+              echo 'Unexpected existing remote branch; manual reconciliation required.' >&2
+              exit 1
+            fi
+            git switch -c "$BRANCH"
+          fi
+      - name: Install exact OpenCode V2 version
+        if: steps.select.outputs.action == 'new' || steps.select.outputs.action == 'repair'
+        run: |
+          npm install -g @opencode/cli@2.2.7
+          test "$(opencode --version | tr -d '\r\n')" = 'opencode v2.2.7'
+      - name: Implement bounded change without GitHub credentials
+        if: steps.select.outputs.action == 'new' || steps.select.outputs.action == 'repair'
+        id: implement
+        env:
+          MODEL: ${{ vars.WORKBENCH_AUTODEV_MODEL }}
+          OPENAI_API_KEY: ${{ secrets.WORKBENCH_OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.WORKBENCH_ANTHROPIC_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.WORKBENCH_DEEPSEEK_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/wb-agent.json" <<'JSON'
+          {"permissions":[
+            {"action":"*","resource":"*","effect":"deny"},
+            {"action":"read","resource":"*","effect":"allow"},
+            {"action":"glob","resource":"*","effect":"allow"},
+            {"action":"grep","resource":"*","effect":"allow"},
+            {"action":"edit","resource":"workbench

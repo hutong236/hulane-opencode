@@ -1,0 +1,41 @@
+name: Hulane PR Checks
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hulane-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      # Cache-only setups: without a version input the setup-* actions keep
+      # the runner's preinstalled toolchain and only configure the cache.
+      - name: Set up npm cache
+        if: ${{ hashFiles('package-lock.json') != '' }}
+        uses: actions/setup-node@v4
+        with:
+          cache: npm
+      - name: Set up Go
+        if: ${{ hashFiles('go.mod') != '' }}
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Set up pip cache
+        if: ${{ hashFiles('**/requirements.txt', '**/requirements-dev.txt') != '' }}
+        uses: actions/setup-python@v5
+        with:
+          cache: pip
+      - name: Run project checks
+        run: bash .github/scripts/hulane-pr-checks.sh
