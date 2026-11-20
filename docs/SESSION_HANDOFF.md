@@ -593,3 +593,12 @@ npm test
 - Concurrency: repository Actions queue and in-progress runs were both zero before write (GitHub REST repository Actions collection).
 - Risk: browser E2E for registration and real Git health status still missing; Issue #8 and production Issue #3 remain open.
 - Next: inspect exact new SHA CI; fix failures first, then add Playwright registration/error/list refresh coverage and Git health status.
+
+
+### WB-004 — Browser registration regression checkpoint (2026-11-20)
+- Branch: `feat/WB-004-registration-client-20261120`; parent: `f9e08caf67c7c7be31a7a9a3001e443a2d408bc0`; authoritative new SHA is remote branch HEAD.
+- Files: `workbench/e2e/project-registration.spec.ts`, this handoff.
+- Acceptance: Playwright verifies local POST payload and persisted list refresh, duplicate 409 redaction, and relative path rejection without POST.
+- Evidence: prior commit `f9e08caf67c7c7be31a7a9a3001e443a2d408bc0` Workbench CI https://github.com/hutong236/hulane-opencode/actions/runs/44826052995 and Hulane CI https://github.com/hutong236/hulane-opencode/actions/runs/44826053009 both completed success. New tests not locally executed; new SHA CI pending. Real OpenCode CLI not exercised.
+- Concurrency: repository Actions in_progress=0, queued=0 immediately before write; target HEAD matched parent.
+- Remaining: verify new Playwright Node 20/22 CI; then implement real Git health status and negative cases. Issue #8 and production #3 remain open; no production merge.
