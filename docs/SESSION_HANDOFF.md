@@ -521,3 +521,14 @@ npm test
 - Validation: Parent commit Workbench CI runs 44665278910 / 44665269707 and Hulane CI 44665278893 succeeded. New commit tests, typecheck, browser Smoke and real OpenCode CLI are **not run locally**; new Actions results must be inspected before claiming success.
 - Risk / blocker: These are HTTP-client regressions, **not** real browser interaction tests. No production Gate A/B/C verification. Issue #8 and Issue #3 stay open.
 - Next step: Inspect this branch's CI; then add browser-level loading/empty/error/retry/cancellation coverage with an actual browser runner, without weakening Hulane Gate.
+
+
+### WB-004 checkpoint — same-origin project list client guard (2026-11-20)
+
+- Branch: `test/WB-004-project-client-origin-guard-20261120` (isolated from verified parent `3516496c861b018c70682719681392d44bfa4298`).
+- Code commit: `68278df39d7a8562ab7797e79869a620988a7afb`.
+- File: `workbench/apps/web/test/project-list-origin-guard.spec.ts`.
+- Acceptance: assert GET project list uses same-origin `/api/projects`, JSON Accept, no-store and no explicit credentials; reject absolute/protocol-relative/non-API URLs without issuing fetch.
+- Prior parent CI: Workbench #44671304861 success; Hulane #44671304879 success. New tests not run locally; new commit CI unverified until checked.
+- Risk: this is request-level Node regression, not browser Smoke or production Gate A/B/C. No actual OpenCode CLI validation.
+- Next: check new branch CI, repair failures first; then add browser-level project-list loading/empty/error/retry smoke.
