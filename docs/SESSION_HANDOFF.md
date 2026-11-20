@@ -566,3 +566,11 @@ npm test
 - Validation: source reviewed against actual `ProjectList.tsx`; local Playwright and real OpenCode CLI **not run**. New commit CI pending and must be checked before claiming pass.
 - Risk: stacked PRs need review; this does not satisfy project registration/Git health UI or production Issue #3.
 - Next: inspect exact SHA Workbench/Hulane CI; fix any failure, then implement project registration and Git health UI controls.
+
+### WB-004 — Safe browser registration API client (2026-11-20)
+- Branch: `feat/WB-004-registration-client-20261120`, stacked on PR #51 SHA `3afefaa50781ed3d2aa5da7f9c84c0ea5381d2bf`.
+- Changed: `workbench/apps/web/src/api/client.ts`, `workbench/apps/web/test/project-registration.spec.ts`.
+- Acceptance: local-only POST /api/projects with validated input and persisted response; duplicate/unsafe-path errors mapped without leaking server text; abort preserved. Server remains authoritative for realpath and Git root checks.
+- Validation: new Node test cases added for success, invalid input, HTTP 400/409, malformed response and abort. No local npm or real OpenCode CLI execution in this API session; exact new commit's CI must be checked after push.
+- Risk: registration UI and live Git health status are not yet wired. Issue #8 and production Issue #3 remain open.
+- Next atomic task: add project registration form to ProjectList, show safe validation failures and refresh persisted list, with browser E2E.
