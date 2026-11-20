@@ -532,3 +532,14 @@ npm test
 - Prior parent CI: Workbench #44671304861 success; Hulane #44671304879 success. New tests not run locally; new commit CI unverified until checked.
 - Risk: this is request-level Node regression, not browser Smoke or production Gate A/B/C. No actual OpenCode CLI validation.
 - Next: check new branch CI, repair failures first; then add browser-level project-list loading/empty/error/retry smoke.
+
+
+### WB-004 checkpoint — Playwright project list browser regression (2026-11-20)
+
+- Step: Add browser-level coverage for pending project list loading, real metadata rendering, empty-list refresh, HTTP 503 retry recovery, and navigation away from a pending request.
+- Branch: `test/WB-004-project-list-browser-20261120-1100`, based on verified PR #48 head `754ac92ea33919075ddb6bfde4da8e41b013e40c`; code commit `bf9c609aa358a0a0c49d377602f522c6cc4e00b2`. Final remote branch HEAD after handoff is authoritative.
+- Files: `workbench/e2e/project-list.spec.ts`, `docs/SESSION_HANDOFF.md`.
+- Acceptance: Playwright tests must pass in Chrome via `cd workbench && npm run test:e2e`; CI at final branch SHA must be inspected. Browser tests authored, **not run locally**; new CI pending. Real OpenCode CLI and production Gate A/B/C **not run**.
+- Concurrency: GitHub Actions repository-wide queued and in_progress queries both returned 0 before writing; last scheduled autonomous development run #44721080097 was completed/success. No writes to main or shared task branches.
+- Risk: This is read-only list UX regression, not full project registration/detail/health UI acceptance. Issue #8 and production Issue #3 remain open. PR dependency chain #39–#48 must be reviewed before any merge.
+- Next: inspect exact new SHA CI, fix failures first; then implement/verify project registration and health controls in the Web UI without bypassing Hulane Gate.
