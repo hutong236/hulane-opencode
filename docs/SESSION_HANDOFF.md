@@ -543,3 +543,14 @@ npm test
 - Concurrency: GitHub Actions repository-wide queued and in_progress queries both returned 0 before writing; last scheduled autonomous development run #44721080097 was completed/success. No writes to main or shared task branches.
 - Risk: This is read-only list UX regression, not full project registration/detail/health UI acceptance. Issue #8 and production Issue #3 remain open. PR dependency chain #39–#48 must be reviewed before any merge.
 - Next: inspect exact new SHA CI, fix failures first; then implement/verify project registration and health controls in the Web UI without bypassing Hulane Gate.
+
+
+### WB-004 — Repair browser CI under React StrictMode (2026-11-20)
+
+- Step: Fix failing PR #49 Playwright assertions (Workbench CI https://github.com/hutong236/hulane-opencode/actions/runs/44724177979, Node 22 browser E2E: 3 failed, 1 passed; Hulane CI https://github.com/hutong236/hulane-opencode/actions/runs/44724177744 passed).
+- Branch: `fix/WB-004-playwright-strictmode-20261120`, based on PR #49 head `6fc29947f2267b0d3eaad549f939cc16410d3abf` (not main, to preserve the failing browser test context).
+- Files: `workbench/e2e/project-list.spec.ts` and this handoff.
+- Change: React.StrictMode runs the initial effect twice in development; route fixtures now keep initial empty/error outcomes through two requests and accept subsequent refresh/retry, while cell locators disambiguate duplicated DOM matches. The original browser tests and cancellation coverage remain in place.
+- Validation: source/log inspection only. New SHA CI and local Playwright **not run/verified** at this checkpoint; real OpenCode CLI not exercised. Exact remote branch HEAD is authoritative after this handoff commit.
+- Risk: the fixture assumes two initial requests in dev; verify exact Node 22 browser results before accepting. Do not close Issue #8 or production Issue #3.
+- Next: inspect fresh Workbench CI Node 20/22 and Hulane CI for this fix; if red, use browser traces to repair the next failing assertion before adding WB-004 project registration UI.
