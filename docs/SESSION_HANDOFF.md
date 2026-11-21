@@ -1,5 +1,16 @@
 # Hulane OpenCode — 会话交接与逐步提交记录
 
+### WB-004 checkpoint — 2026-11-21: unborn HEAD and staged-dirty regression
+
+- Task: add a focused real-Git regression for a newly initialized repository before its first commit, including staged and untracked dirty states.
+- Branch: `feat/WB-004-registration-client-20261120`; parent remote SHA: `2891e96e774f99e276bb860c20181f8025305121`; new remote SHA is authoritative at the branch ref (avoid self-referential hash).
+- Files: `workbench/apps/api/test/repository-status.spec.ts`, `docs/SESSION_HANDOFF.md`.
+- Acceptance: `readRepositoryStatus` returns `headSha: null`, the real symbolic branch and `dirty: false` on an empty unborn repository; staged and untracked files both report dirty without fabricating a HEAD.
+- Validation: static source review only; local Node/Git test execution and new commit CI are **not yet verified**. Previous commit `2891e96e774f99e276bb860c20181f8025305121` Workbench CI [44882886809](https://github.com/hutong236/hulane-opencode/actions/runs/44882886809) and Hulane CI [44882886767](https://github.com/hutong236/hulane-opencode/actions/runs/44882886767) passed; do not apply those results to this change.
+- Concurrency: GitHub Actions REST reported zero in-progress and zero queued workflow runs immediately before this checkpoint.
+- Next: inspect both CI workflows on the new remote SHA; fix any failure first, otherwise expose real persisted project Git health in Web UI and cover stale/missing repository errors. Keep Issues #8 and #3 open; no Gate bypass or production merge.
+
+
 > **本文件是 Web/ChatGPT 会话结束后的恢复入口。每完成一个可验收的小步骤，必须立刻 Commit + Push，并在本文件记录新的进展（优先与该步骤同一提交）。**
 >
 > 续作时始终先读取 GitHub 远程分支当前状态，不依赖上一次会话的聊天记录。工作约定详见仓库根目录 [AGENTS.md](../AGENTS.md)。
