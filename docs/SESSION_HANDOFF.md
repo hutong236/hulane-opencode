@@ -602,3 +602,12 @@ npm test
 - Evidence: prior commit `f9e08caf67c7c7be31a7a9a3001e443a2d408bc0` Workbench CI https://github.com/hutong236/hulane-opencode/actions/runs/44826052995 and Hulane CI https://github.com/hutong236/hulane-opencode/actions/runs/44826053009 both completed success. New tests not locally executed; new SHA CI pending. Real OpenCode CLI not exercised.
 - Concurrency: repository Actions in_progress=0, queued=0 immediately before write; target HEAD matched parent.
 - Remaining: verify new Playwright Node 20/22 CI; then implement real Git health status and negative cases. Issue #8 and production #3 remain open; no production merge.
+
+### WB-004 — Invalid Git root browser retry regression (2026-11-20)
+- Branch: `feat/WB-004-registration-client-20261120`; parent verified remote SHA `3f628a9ecfd27239198e9689f834ac83984a0edd`.
+- Files: `workbench/e2e/project-registration.spec.ts`, `docs/SESSION_HANDOFF.md`.
+- Acceptance: browser regression checks API 400 for a non-Git absolute root is rendered as sanitized feedback without leaking server text; corrected path retries successfully and refreshes the registered list.
+- Validation: previous SHA Workbench CI https://github.com/hutong236/hulane-opencode/actions/runs/44833562838 and Hulane CI https://github.com/hutong236/hulane-opencode/actions/runs/44833562856 both completed success. New Playwright test NOT executed locally; new SHA CI pending; real OpenCode CLI NOT exercised.
+- Concurrency: repository Actions queued=0, in_progress=0 before this change; branch SHA verified. No production operations.
+- Risk: mocked HTTP responses are not a real three-repository integration acceptance; Git health UI still missing. Issues #8 and #3 remain open.
+- Next: inspect new SHA CI, fix failures first, then wire real HEAD/branch/dirty status into the Web project view with browser regression.

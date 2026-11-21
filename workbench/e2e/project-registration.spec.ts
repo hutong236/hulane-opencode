@@ -64,3 +64,32 @@ test('relative repository path fails form validation without POST', async ({ pag
   await expect(page.getByText('必须使用绝对路径')).toBeVisible();
   expect(posts).toBe(0);
 });
+
+test('invalid Git root returns safe 400 feedback and allows a corrected retry', async ({ page }) => {
+  const posts: unknown[] = [];
+  await page.route('**/api/projects', route => {
+    if (route.request().method() === 'POST') {
+      const body = route.request().postDataJSON();
+      posts.push(body);
+      if (posts.length === 1) {
+        return route.fulfill({ status: 400, contentType: 'text/plain',
+          body: 'PRIVATE_SERVER_PATH=/home/secret/repository' });
+      }
+      return route.fulfill({ status: 201, contentType: 'application/json',
+        body: JSON.stringify(registered) });
+    }
+    return route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ projects: posts.length === 2 ? [registered] : [] }) });
+  });
+  await page.goto('/projects');
+  await page.getByRole('textbox', { name: '仓库绝对路径' }).fill('/tmp/not-a-git-repository');
+  await page.getByRole('textbox', { name: '项目标识' }).fill('cmdb');
+  await page.getByRole('textbox', { name: '项目名称' }).fill('CMDB');
+  await page.getByRole('button', { name: '登记仓库' }).click();
+  await expect(page.getByText('无效的 Git 仓库路径')).toBeVisible();
+  await expect(page.getByText(/PRIVATE_SERVER_PATH/)).toHaveCount(0);
+  await page.getByRole('textbox', { name: '仓库绝对路径' }).fill('/tmp/workbench-cmdb');
+  await page.getByRole('button', { name: '登记仓库' }).click();
+  await expect(page.getByRole('cell', { name: 'CMDB', exact: true })).toBeVisible();
+  expect(posts).toHaveLength(2);
+});
