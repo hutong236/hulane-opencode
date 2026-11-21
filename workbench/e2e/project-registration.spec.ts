@@ -86,7 +86,7 @@ test('invalid Git root returns safe 400 feedback and allows a corrected retry', 
   await page.getByRole('textbox', { name: '项目标识' }).fill('cmdb');
   await page.getByRole('textbox', { name: '项目名称' }).fill('CMDB');
   await page.getByRole('button', { name: '登记仓库' }).click();
-  await expect(page.getByText('无效的 Git 仓库路径')).toBeVisible();
+  await expect(page.getByText('仓库路径或登记信息无效')).toBeVisible();
   await expect(page.getByText(/PRIVATE_SERVER_PATH/)).toHaveCount(0);
   await page.getByRole('textbox', { name: '仓库绝对路径' }).fill('/tmp/workbench-cmdb');
   await page.getByRole('button', { name: '登记仓库' }).click();

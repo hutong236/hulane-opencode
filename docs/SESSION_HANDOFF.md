@@ -611,3 +611,12 @@ npm test
 - Concurrency: repository Actions queued=0, in_progress=0 before this change; branch SHA verified. No production operations.
 - Risk: mocked HTTP responses are not a real three-repository integration acceptance; Git health UI still missing. Issues #8 and #3 remain open.
 - Next: inspect new SHA CI, fix failures first, then wire real HEAD/branch/dirty status into the Web project view with browser regression.
+
+### WB-004 — Align HTTP 400 browser assertion with sanitized client feedback (2026-11-21)
+- Branch: `feat/WB-004-registration-client-20261120`; verified parent remote SHA `7bf996e3eab07d8295bf4167663dda0bc5c7a8f8`.
+- Files: `workbench/e2e/project-registration.spec.ts`, `docs/SESSION_HANDOFF.md`.
+- Acceptance: invalid Git root HTTP 400 displays the actual sanitized client message `仓库路径或登记信息无效`, does not reveal `PRIVATE_SERVER_PATH`, and corrected retry still refreshes the project list. Only the mismatched assertion changed; existing retry and redaction checks retained.
+- Evidence: prior Workbench CI https://github.com/hutong236/hulane-opencode/actions/runs/44847096365 failed on old expected wording; prior Hulane CI https://github.com/hutong236/hulane-opencode/actions/runs/44847096379 succeeded. Source-level assertion replacement verified; no local npm/Playwright or real OpenCode CLI execution. New SHA CI must be checked after push.
+- Concurrency: repository Actions in_progress=0 and queued=0 from GitHub REST before write; remote target HEAD verified.
+- Risk: mock-based Playwright is not real local Git root or production Gate acceptance. Issues #8 and #3 remain open.
+- Next: verify exact new SHA Workbench/Hulane CI; if green, implement actual Git HEAD/branch/dirty health status in Web project list with tests.
