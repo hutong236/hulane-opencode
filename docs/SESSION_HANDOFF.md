@@ -1,3 +1,13 @@
+### WB-004 checkpoint — 2026-11-22: persisted-ID Git health endpoint
+
+- Task: expose read-only `GET /api/projects/:id/status` for registered repositories only, with UUID validation, missing project handling and fail-closed stale-root response.
+- Branch: `feat/WB-004-status-by-id-20261121`; parent `ffe6515051f9aece7d648c0f73fbfd5cf77c96fe`; new remote SHA is authoritative at the branch ref.
+- Files: `workbench/apps/api/src/app.ts`, `workbench/apps/api/test/project-status-by-id.spec.ts`, `docs/SESSION_HANDOFF.md`.
+- Acceptance: real HEAD and dirty state by persisted ID; 400 malformed ID, 404 unknown ID, 409 stale root; no absolute filesystem path in errors.
+- Validation: source-level review only at commit time; Node test execution and this commit's CI are **unverified** until Actions completes. Real OpenCode CLI not exercised.
+- Concurrency: GitHub Actions REST `status=in_progress` and `status=queued` both returned zero immediately before this task; isolated new branch avoids writes to the active WB-004 branch.
+- Next: inspect new commit CI and fix failures first; then add strict Web API client and UI display for ID-based health with stale-root/retry/cancellation tests. Keep Issues #8 and #3 open.
+
 # Hulane OpenCode — 会话交接与逐步提交记录
 
 ### WB-004 checkpoint — 2026-11-21: unborn HEAD and staged-dirty regression

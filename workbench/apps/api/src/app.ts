@@ -42,6 +42,21 @@ export function buildApp(options: { database?: WorkbenchDatabase } = {}) {
     if (!project) return reply.code(404).send({ error: 'Project not found' });
     return project;
   });
+  // Resolve status only from a persisted project ID; clients cannot substitute an arbitrary path.
+  app.get<{ Params: { id: string } }>('/api/projects/:id/status', async (request, reply) => {
+    const id = request.params.id;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      return reply.code(400).send({ error: 'Invalid project ID' });
+    }
+    const project = database().projects.find(id);
+    if (!project) return reply.code(404).send({ error: 'Project not found' });
+    try {
+      return await readRepositoryStatus(project.repo_root);
+    } catch {
+      // The repository may have been moved or deleted since registration.
+      return reply.code(409).send({ error: 'Registered Git repository is unavailable' });
+    }
+  });
   // Unregister only the SQLite record; never remove or modify the local Git repository.
   app.delete<{ Params: { id: string } }>('/api/projects/:id', async (request, reply) => {
     const id = request.params.id;
