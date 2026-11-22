@@ -91,3 +91,33 @@ test('navigating away during a pending request does not show stale project data'
   await expect(page.getByRole('heading', { name: '需求中心' })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'CMDB', exact: true }).first()).toHaveCount(0);
 });
+
+test('registered project shows live HEAD, branch and dirty status', async ({ page }) => {
+  await page.route('**/api/projects', route => route.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ projects: [project] }) }));
+  await page.route('**/api/projects/*/status', route => route.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ repoRoot: project.repo_root, headSha: 'a'.repeat(40), branch: 'feature/health', dirty: true }) }));
+  await page.goto('/projects');
+  await expect(page.getByText('aaaaaaaaaaaa')).toBeVisible();
+  await expect(page.getByText('feature/health')).toBeVisible();
+  await expect(page.getByText('有未提交修改')).toBeVisible();
+});
+
+test('stale Git repository reports a scoped error and can retry independently', async ({ page }) => {
+  let attempts = 0;
+  await page.route('**/api/projects', route => route.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ projects: [project] }) }));
+  await page.route('**/api/projects/*/status', route => {
+    attempts++;
+    return route.fulfill(attempts <= 2 ? { status: 409, body: 'sensitive /private/path' }
+      : { status: 200, contentType: 'application/json',
+          body: JSON.stringify({ repoRoot: project.repo_root, headSha: null, branch: 'main', dirty: false }) });
+  });
+  await page.goto('/projects');
+  await expect(page.getByText('已登记的 Git 仓库不可用')).toBeVisible();
+  await expect(page.getByText('sensitive /private/path')).toHaveCount(0);
+  await page.getByRole('button', { name: '重试状态' }).click();
+  await expect(page.getByText('尚无提交')).toBeVisible();
+  await expect(page.getByText('工作区干净')).toBeVisible();
+  expect(attempts).toBeGreaterThanOrEqual(3);
+});

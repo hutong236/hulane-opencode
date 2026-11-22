@@ -1,11 +1,40 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Card, Empty, Form, Input, Space, Table, Typography } from 'antd';
-import { ApiError, getProjects, registerProject, type RegisteredProject } from '../api/client';
+import { ApiError, getProjectStatus, getProjects, registerProject, type ProjectGitStatus, type RegisteredProject } from '../api/client';
 
 type ListState =
   | { status: 'loading' }
   | { status: 'error'; message: string }
   | { status: 'ready'; projects: RegisteredProject[] };
+type HealthState = { status: 'loading' } | { status: 'ready'; value: ProjectGitStatus } | { status: 'error'; message: string };
+function ProjectHealth({ id }: { id: string }) {
+  const [revision, setRevision] = useState(0);
+  const [health, setHealth] = useState<HealthState>({ status: 'loading' });
+  useEffect(() => {
+    const controller = new AbortController();
+    setHealth({ status: 'loading' });
+    getProjectStatus(id, controller.signal).then(value => {
+      if (!controller.signal.aborted) setHealth({ status: 'ready', value });
+    }).catch(error => {
+      if (!controller.signal.aborted) setHealth({
+        status: 'error', message: error instanceof ApiError ? error.message : '无法读取 Git 状态',
+      });
+    });
+    return () => controller.abort();
+  }, [id, revision]);
+  if (health.status === 'loading') return <Typography.Text aria-label="Git 状态加载中">加载中…</Typography.Text>;
+  if (health.status === 'error') return <Space size="small">
+    <Typography.Text type="danger">{health.message}</Typography.Text>
+    <Button size="small" onClick={() => setRevision(value => value + 1)}>重试状态</Button>
+  </Space>;
+  return <Space size="small" wrap>
+    <Typography.Text code>{health.value.headSha?.slice(0, 12) ?? '尚无提交'}</Typography.Text>
+    <Typography.Text>{health.value.branch ?? '游离 HEAD'}</Typography.Text>
+    <Typography.Text type={health.value.dirty ? 'warning' : 'success'}>
+      {health.value.dirty ? '有未提交修改' : '工作区干净'}
+    </Typography.Text>
+  </Space>;
+}
 type RegistrationFields = { path: string; slug: string; name: string };
 
 /** Registration changes only the local catalog; the API validates the real Git root. */
@@ -87,6 +116,7 @@ export function ProjectList() {
               { title: '标识', dataIndex: 'slug', key: 'slug' },
               { title: '默认分支', dataIndex: 'default_branch', key: 'default_branch' },
               { title: '本地仓库', dataIndex: 'repo_root', key: 'repo_root', ellipsis: true },
+              { title: '实时 Git 状态', key: 'git-health', render: (_: unknown, item: RegisteredProject) => <ProjectHealth key={item.id} id={item.id} /> },
             ]} />)}
     </Card>
   </Space>;
