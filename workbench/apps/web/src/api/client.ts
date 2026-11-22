@@ -103,3 +103,36 @@ export async function registerProject(input: { path: string; slug: string; name:
   catch { throw new ApiError('API 返回无效 JSON', response.status); }
   return decodeProjectList({ projects: [payload] })[0]!;
 }
+
+/** Live Git status for a registered project; never accepts an arbitrary filesystem path. */
+export interface ProjectGitStatus {
+  repoRoot: string;
+  headSha: string | null;
+  branch: string | null;
+  dirty: boolean;
+}
+
+export function decodeProjectGitStatus(value: unknown): ProjectGitStatus {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ApiError('API 返回的数据结构不正确');
+  const row = value as Record<string, unknown>;
+  if (typeof row.repoRoot !== 'string' || !row.repoRoot.startsWith('/') ||
+      (row.headSha !== null && (typeof row.headSha !== 'string' || !/^[0-9a-f]{40}$/i.test(row.headSha))) ||
+      (row.branch !== null && (typeof row.branch !== 'string' || !row.branch.trim())) ||
+      typeof row.dirty !== 'boolean') {
+    throw new ApiError('API 返回的数据结构不正确');
+  }
+  return { repoRoot: row.repoRoot, headSha: row.headSha, branch: row.branch, dirty: row.dirty };
+}
+
+export async function getProjectStatus(id: string, signal?: AbortSignal): Promise<ProjectGitStatus> {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    throw new ApiError('项目 ID 无效', 400);
+  }
+  try {
+    return await requestJson(`/api/projects/${id}/status`, decodeProjectGitStatus, signal);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 409) throw new ApiError('已登记的 Git 仓库不可用', 409);
+    if (error instanceof ApiError && error.status === 404) throw new ApiError('项目不存在', 404);
+    throw error;
+  }
+}
