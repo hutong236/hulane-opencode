@@ -1,3 +1,13 @@
+### WB-004 checkpoint — 2026-11-23: safe unregister Web API client
+
+- Task: add strict persisted-UUID DELETE client with HTTP 204 empty-body handling, sanitized errors and abort propagation; add four Node regression cases.
+- Branch: `feat/WB-004-unregister-client-20261123`; parent: `04b35e1d41e2cbe0d847fc50d1d3dae53fa8e524`; authoritative new SHA is the remote branch ref (not self-referenced here).
+- Files: `workbench/apps/web/src/api/client.ts`, `workbench/apps/web/test/project-unregister.spec.ts`, `docs/SESSION_HANDOFF.md`.
+- Acceptance: invalid IDs cause no request; successful DELETE returns void only on 204; server response body is never exposed; cancellation is preserved. This only unregisters the catalog entry, not repository files.
+- Validation: static source review; Node tests, browser E2E, TypeScript and real OpenCode CLI **not run** in this connector-only run. New commit CI must be checked separately.
+- Concurrency: repository-level Actions in_progress=0, queued=0, waiting=0, requested=0, pending=0 before isolated branch write; prior WB-004 commit `04b35e1d41e2cbe0d847fc50d1d3dae53fa8e524` Workbench/Hulane CI passed.
+- Next: inspect this exact commit's CI; then implement ProjectList explicit confirmation, duplicate-submit guard, error retention, successful refresh and browser regression. Issues #8 and #3 stay open.
+
 ### WB-004 checkpoint — 2026-11-22: multi-project Git health isolation regression
 
 - Task: add Playwright regression for two registered project rows, one 404 error and one healthy dirty repository; retry only the failed row.
