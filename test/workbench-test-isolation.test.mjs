@@ -13,4 +13,7 @@ test("root test command explicitly isolates legacy regression suite from Workben
   assert.equal(rootPackage.scripts["test:core"], rootPackage.scripts.test);
   assert.ok(existsSync(path.join(root, "workbench/apps/api/test/health.spec.ts")));
   assert.ok(workbenchPackage.scripts.test, "Workbench must retain its independent test command");
+  // `workbench/test/` is not a workspace: nothing runs its tests unless this script does.
+  assert.match(workbenchPackage.scripts.test, /node --test test\/\*\.test\.mjs/);
+  assert.match(workbenchPackage.scripts.test, /npm run test --workspaces/);
 });
