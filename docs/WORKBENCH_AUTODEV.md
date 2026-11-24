@@ -15,6 +15,8 @@ The workflow file stopped inside its model step from its first commit (`8e8cfcc`
 
 A new task uses `feat/WB-NNN-autodev`. If that branch already exists on the remote, the run ID is appended instead of reusing it.
 
+Every run prepends a checkpoint to `docs/SESSION_HANDOFF.md`, the same place every hand-made branch does. `.gitattributes` gives that file the `union` merge driver, so two branches that both add an entry merge without a conflict; the entries keep their dates but not necessarily their order.
+
 ## Manual run and dry run
 
 ```bash

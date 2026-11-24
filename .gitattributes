@@ -1,0 +1,2 @@
+# Every checkpoint and every autonomous run prepends an entry here. Keep both sides when two branches do.
+docs/SESSION_HANDOFF.md merge=union

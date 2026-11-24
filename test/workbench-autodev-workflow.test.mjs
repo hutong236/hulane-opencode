@@ -122,3 +122,9 @@ test("publishing needs passing checks and can only open or update a Draft", () =
   assert.match(step("Run checks without any credentials"), /test "\$pass" = true/,
     "a failing check must fail the run instead of leaving it green");
 });
+
+test("the handoff merges with the union driver, so concurrent checkpoints never conflict", () => {
+  // Every autonomous run prepends a checkpoint to the same place as every hand-made branch.
+  const attributes = readFileSync(path.join(root, ".gitattributes"), "utf8");
+  assert.match(attributes, /^docs\/SESSION_HANDOFF\.md merge=union$/m);
+});
