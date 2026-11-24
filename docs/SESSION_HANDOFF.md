@@ -1,3 +1,14 @@
+### Workbench autonomous development — 2026-11-25: workflow completed and verified by dry runs
+
+- Task: repair `.github/workflows/workbench-autodev.yml`, truncated since its first commit, and re-enable it at the owner's request.
+- Branch: `fix/workbench-autodev-workflow-20261125`, pull request #64, from `main` `37cf2734`. The remote branch head is the authoritative SHA.
+- Files: `.github/workflows/workbench-autodev.yml`, `bin/workbench-autodev.mjs`, `test/workbench-autodev.test.mjs`, `test/workbench-autodev-workflow.test.mjs`, `docs/WORKBENCH_AUTODEV.md`, `docs/SESSION_HANDOFF.md`.
+- What changed: the missing stages now exist. A dedicated `autodev` agent may read and may edit `workbench/*` and `docs/SESSION_HANDOFF.md`, nothing else. The change verification also rejects deleted files and changes to existing test scripts or to tracked test configuration. A credential-free check step streams every result into the job log, and the publishing step runs only after every check passed and only opens or comments on a Draft pull request. A `workflow_dispatch` with `publish=false` runs everything and publishes nothing. The structure test reads the workflow at the start of every run. Details are in `docs/WORKBENCH_AUTODEV.md`.
+- Validation: root `npm test` passed 199/199. 13 deliberate breakages of the workflow are all caught by the structure test, and the truncated file from `main` fails all 5 of its cases. The scripts were extracted from the YAML and executed locally: branch step 3/3, verification 16/16, publishing with a stubbed `gh` and a local bare origin 10/10, and the real check step 10/10 in 65 s, or a red run when lint is made to fail. Two real dry runs on GitHub with `publish=false`, [45441282096](https://github.com/hutong236/hulane-opencode/actions/runs/45441282096) and [45446363872](https://github.com/hutong236/hulane-opencode/actions/runs/45446363872), selected WB-005, ran the model for 11 and 7 minutes with `deepseek/deepseek-flash`, passed the verification and every check, and published nothing.
+- Not verified yet: the publishing step against GitHub, that is the push with the dedicated token, the Draft creation and the repair comment. The first run that publishes shows whether it works.
+- Coordination: WB-004 is reserved by pull request #65, so the selector starts with WB-005. Nobody reviews a change before it becomes a Draft pull request, and a red one is retried by every later run without a cap.
+- Next: merge #64, watch the first run that publishes, and review the Draft pull request it creates. Issue #3 stays open; this is development automation, not production acceptance.
+
 ### WB-004 checkpoint — 2026-11-24: lint tests wired in, Playwright output ignored
 
 - Task: make the Workbench lint unit tests run in CI, and stop Playwright's generated output from failing lint locally or being committed.
