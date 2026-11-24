@@ -3,6 +3,11 @@ on:
   schedule:
     - cron: '*/30 * * * *'
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Push the branch and open or update the Draft PR. With false the model and the checks run, but nothing leaves the runner.
+        type: boolean
+        default: true
 concurrency:
   group: workbench-autodev
   cancel-in-progress: false
@@ -12,7 +17,7 @@ permissions:
 jobs:
   implement:
     if: github.repository == 'hutong236/hulane-opencode'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     permissions:
       contents: read
@@ -28,7 +33,7 @@ jobs:
         with:
           node-version: '22'
       - name: Verify issue selection and safety logic
-        run: node --test test/workbench-autodev.test.mjs
+        run: node --test test/workbench-autodev.test.mjs test/workbench-autodev-workflow.test.mjs
       - name: Require credentials matching the selected model provider
         id: configured
         env:
@@ -45,10 +50,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: node bin/workbench-autodev.mjs select
       - name: Create or restore issue branch
-        if: steps.select.outputs.action == 'new' || steps.select.outputs.action == 'repair'
+        if: steps.configured.outputs.enabled == 'true' && (steps.select.outputs.action == 'new' || steps.select.outputs.action == 'repair')
+        id: create
         env:
           BRANCH: ${{ steps.select.outputs.branch }}
           MODE: ${{ steps.select.outputs.action }}
+          RUN_ID: ${{ github.run_id }}
         shell: bash
         run: |
           set -euo pipefail
@@ -57,32 +64,222 @@ jobs:
             git fetch origin "$BRANCH"
             git switch -c "$BRANCH" "origin/$BRANCH"
           else
-            if git ls-remote --exit-code --heads origin "$BRANCH"; then
-              echo 'Unexpected existing remote branch; manual reconciliation required.' >&2
-              exit 1
+            # An earlier attempt for the same issue can leave its branch behind; never reuse or move it.
+            if git ls-remote --exit-code --heads origin "$BRANCH" > /dev/null; then
+              BRANCH="$BRANCH-$RUN_ID"
             fi
             git switch -c "$BRANCH"
           fi
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
       - name: Install exact OpenCode V2 version
-        if: steps.select.outputs.action == 'new' || steps.select.outputs.action == 'repair'
+        if: steps.configured.outputs.enabled == 'true' && (steps.select.outputs.action == 'new' || steps.select.outputs.action == 'repair')
         run: |
           npm install -g @opencode/cli@2.2.7
           test "$(opencode --version | tr -d '\r\n')" = 'opencode v2.2.7'
       - name: Implement bounded change without GitHub credentials
-        if: steps.select.outputs.action == 'new' || steps.select.outputs.action == 'repair'
-        id: implement
+        if: steps.configured.outputs.enabled == 'true' && (steps.select.outputs.action == 'new' || steps.select.outputs.action == 'repair')
         env:
           MODEL: ${{ vars.WORKBENCH_AUTODEV_MODEL }}
           OPENAI_API_KEY: ${{ secrets.WORKBENCH_OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.WORKBENCH_ANTHROPIC_API_KEY }}
           DEEPSEEK_API_KEY: ${{ secrets.WORKBENCH_DEEPSEEK_API_KEY }}
+          CODE: ${{ steps.select.outputs.code }}
+          MODE: ${{ steps.select.outputs.action }}
         shell: bash
         run: |
           set -euo pipefail
+          # Agent rules are applied after the global ones and the last match wins, so the limits live on the agent itself.
           cat > "$RUNNER_TEMP/wb-agent.json" <<'JSON'
-          {"permissions":[
-            {"action":"*","resource":"*","effect":"deny"},
-            {"action":"read","resource":"*","effect":"allow"},
-            {"action":"glob","resource":"*","effect":"allow"},
-            {"action":"grep","resource":"*","effect":"allow"},
-            {"action":"edit","resource":"workbench
+          {
+            "agents": {
+              "autodev": {
+                "description": "One bounded Workbench step: reads the checkout and edits the allowed paths only",
+                "mode": "primary",
+                "steps": 80,
+                "permissions": [
+                  {"action": "*", "resource": "*", "effect": "deny"},
+                  {"action": "read", "resource": "*", "effect": "allow"},
+                  {"action": "read", "resource": "*.env", "effect": "deny"},
+                  {"action": "read", "resource": "*.env.*", "effect": "deny"},
+                  {"action": "glob", "resource": "*", "effect": "allow"},
+                  {"action": "grep", "resource": "*", "effect": "allow"},
+                  {"action": "edit", "resource": "workbench/*", "effect": "allow"},
+                  {"action": "edit", "resource": "docs/SESSION_HANDOFF.md", "effect": "allow"}
+                ]
+              }
+            }
+          }
+          JSON
+          cat > "$RUNNER_TEMP/wb-prompt.md" <<'MD'
+          You are implementing ONE small, verifiable step of the attached GitHub issue in this repository checkout.
+
+          Hard limits. They are enforced, and a later workflow step rejects anything else:
+          - Edit only files under `workbench/`, plus one new checkpoint entry at the top of `docs/SESSION_HANDOFF.md`.
+          - Never delete a file. Never change the test, lint, typecheck or build scripts of a package.json, `workbench/playwright.config.ts` or `workbench/scripts/lint.mjs`.
+          - Never create or edit `.env*` files, keys or credentials, and never write a secret into any file.
+          - You cannot run commands, tests or network requests. The next workflow step runs lint, typecheck, build, unit tests and the Playwright browser suite, and nothing is published unless all of them pass.
+
+          How to work:
+          - Read the issue, then the existing code it touches. Reuse what is already there and match the patterns and style of neighbouring files.
+          - Keep the change to at most 30 files: one bounded slice of the issue, with tests for the normal, failure and boundary cases.
+          - Tests live in `workbench/apps/api/test/*.spec.ts` (Fastify `inject`), `workbench/apps/web/test/*.spec.ts` (`node:test`) and `workbench/e2e/*.spec.ts` (Playwright).
+          - Every source file must end with a single newline and contain no trailing whitespace; that is checked before anything else.
+          - Finish by prepending a short checkpoint to `docs/SESSION_HANDOFF.md`: task, files, what was not verified, next step. Never state that tests passed.
+
+          End with a short summary: what you changed, what you could not do, and what remains for the issue.
+          MD
+          if [ "$MODE" = repair ]; then
+            cat >> "$RUNNER_TEMP/wb-prompt.md" <<'MD'
+
+          This run is a repair. The Draft pull request for this issue has failing CI, and you cannot read CI logs. Look for type errors, lint errors, failing assertions and missing test fixtures. Fix the cause without weakening any test, and add the missing regression.
+          MD
+          fi
+          export OPENCODE_CONFIG="$RUNNER_TEMP/wb-agent.json"
+          status=0
+          opencode run --standalone --agent autodev --model "$MODEL" --title "$CODE $MODE" --archived \
+            --file "$RUNNER_TEMP/workbench-autodev-issue.md" "$(cat "$RUNNER_TEMP/wb-prompt.md")" \
+            > "$RUNNER_TEMP/wb-implement.log" 2>&1 || status=$?
+          {
+            echo "### OpenCode output (last 6000 characters, exit status $status)"
+            echo
+            echo '```'
+            tail -c 6000 "$RUNNER_TEMP/wb-implement.log"
+            echo
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "OpenCode exited with status $status"
+          test "$status" -eq 0
+      - name: Verify change scope
+        if: steps.configured.outputs.enabled == 'true' && (steps.select.outputs.action == 'new' || steps.select.outputs.action == 'repair')
+        id: verify
+        # The copy taken before the model ran judges the model's own working tree.
+        run: node "$RUNNER_TEMP/workbench-runner.mjs" verify
+      - name: Run checks without any credentials
+        if: steps.configured.outputs.enabled == 'true' && (steps.select.outputs.action == 'new' || steps.select.outputs.action == 'repair') && steps.verify.outputs.changed == 'true'
+        id: checks
+        shell: bash
+        run: |
+          set -uo pipefail
+          declare -A result
+          # run <name> <command...>: streams the output into the job log and records PASS or FAIL.
+          run() {
+            local name="$1"
+            shift
+            echo "::group::$name"
+            if "$@" 2>&1 | tee "$RUNNER_TEMP/wb-$name.log"; then
+              result["$name"]=PASS
+            else
+              result["$name"]=FAIL
+            fi
+            echo "::endgroup::"
+          }
+          run root-install npm ci --no-audit --no-fund
+          run root-syntax npm run check:syntax
+          run root-tests npm test
+          cd workbench
+          run workbench-install npm ci --no-audit --no-fund
+          run workbench-lint npm run lint
+          run workbench-typecheck npm run typecheck
+          run workbench-build npm run build
+          run workbench-unit npm test
+          # Workbench CI uses the Chrome preinstalled on this runner image.
+          run workbench-browser google-chrome --version
+          run workbench-browser-test npm run test:e2e
+          pass=true
+          summary='| Check | Result |'$'\n''| --- | --- |'
+          for name in root-install root-syntax root-tests workbench-install workbench-lint workbench-typecheck workbench-build workbench-unit workbench-browser workbench-browser-test; do
+            value="${result[$name]:-SKIP}"
+            if [ "$value" != PASS ]; then pass=false; fi
+            summary+=$'\n'"| $name | $value |"
+          done
+          {
+            echo "pass=$pass"
+            echo "summary<<WB_RESULTS"
+            echo "$summary"
+            echo "WB_RESULTS"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo '### Checks run on the runner before any publishing'
+            echo
+            echo 'These are not CI results.'
+            echo
+            echo "$summary"
+            echo
+            echo "Result: $pass"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "checks pass: $pass"
+          test "$pass" = true
+      - name: Show the unpublished change
+        if: steps.configured.outputs.enabled == 'true' && steps.verify.outputs.changed == 'true' && github.event_name == 'workflow_dispatch' && inputs.publish != true
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo '### Unpublished change (dry run)'
+            echo
+            echo '```'
+            git --no-pager diff --stat HEAD
+            git status --short
+            echo '```'
+            echo
+            echo '<details><summary>Diff without lock files, then new files</summary>'
+            echo
+            echo '```diff'
+            git --no-pager diff --no-color HEAD -- . ':(exclude)workbench/package-lock.json' | head -c 60000
+            for file in $(git ls-files --others --exclude-standard); do
+              echo "--- new file: $file"
+              head -c 4000 "$file"
+            done
+            echo '```'
+            echo
+            echo '</details>'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Publish Draft pull request
+        if: steps.configured.outputs.enabled == 'true' && steps.verify.outputs.changed == 'true' && steps.checks.outputs.pass == 'true' && (github.event_name == 'schedule' || inputs.publish)
+        env:
+          GH_TOKEN: ${{ secrets.WORKBENCH_AUTODEV_TOKEN }}
+          BRANCH: ${{ steps.create.outputs.branch }}
+          CODE: ${{ steps.select.outputs.code }}
+          PR: ${{ steps.select.outputs.pr }}
+          MODE: ${{ steps.select.outputs.action }}
+          MODEL: ${{ vars.WORKBENCH_AUTODEV_MODEL }}
+          RESULTS: ${{ steps.checks.outputs.summary }}
+          BASE: ${{ github.event.repository.default_branch || 'main' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # "# WB-004: [WB-004][M1][P0] title" becomes "WB-004: title".
+          title="$(head -n 1 "$RUNNER_TEMP/workbench-autodev-issue.md" | sed -E 's/^# (WB-[0-9]{3}): (\[[^]]+\])+ */\1: /')"
+          test -n "$title"
+          git config user.name 'workbench-autodev'
+          git config user.email 'workbench-autodev@users.noreply.github.com'
+          git add -A
+          git commit -q -m "$title" -m "Automated change from $RUN_URL. Opened as a Draft; not reviewed, not merged."
+          sha="$(git rev-parse HEAD)"
+          gh auth setup-git
+          # A plain push: it is rejected, never forced, when the branch has moved on.
+          git push origin "HEAD:refs/heads/$BRANCH"
+          {
+            echo "Automated Draft pull request from the Workbench autonomous development workflow."
+            echo
+            echo "Run: $RUN_URL"
+            echo "Not reviewed. The workflow merges nothing and closes no Issue."
+            echo
+            echo "- Issue: $(sed -n 's/^Source: //p' "$RUNNER_TEMP/workbench-autodev-issue.md")"
+            echo "- Branch: \`$BRANCH\` ($MODE), commit \`$sha\`"
+            echo "- Model: \`$MODEL\`"
+            echo
+            echo 'Checks run on the runner before publishing. They are not CI results:'
+            echo
+            echo "$RESULTS"
+            echo
+            echo 'The checks on this pull request decide the real result. A red pull request is repaired by a later run; a green one waits for human review.'
+          } > "$RUNNER_TEMP/wb-pr-body.md"
+          if [ "$PR" = 0 ]; then
+            url="$(gh pr create --draft --base "$BASE" --head "$BRANCH" --title "$title" --body-file "$RUNNER_TEMP/wb-pr-body.md")"
+          else
+            gh pr comment "$PR" --body-file "$RUNNER_TEMP/wb-pr-body.md"
+            url="$(gh pr view "$PR" --json url --jq .url)"
+          fi
+          echo "Published $url (commit $sha)" | tee -a "$GITHUB_STEP_SUMMARY"

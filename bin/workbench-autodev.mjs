@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { appendFileSync, writeFileSync, lstatSync, existsSync } from 'node:fs';
+import { appendFileSync, writeFileSync, lstatSync, existsSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 
 const REPO = process.env.GITHUB_REPOSITORY || 'hutong236/hulane-opencode';
@@ -108,13 +108,45 @@ export function validatePaths(paths) {
   }
   return true;
 }
+const PROTECTED_SCRIPTS=/^(?:test(?::[a-z0-9-]+)?|lint|typecheck|build)$/;
+// Files that decide how the change is judged. Only tracked ones count: a new package brings its own configuration.
+const isProtectedFile=path=>/(^|\/)tsconfig[^/]*\.json$/.test(path)||[
+  'workbench/playwright.config.ts','workbench/scripts/lint.mjs','workbench/.gitignore'].includes(path);
+/** An autonomous change may add or edit files, never remove the checks that judge it. */
+export function validateNoWeakening({deleted=[],scripts=[],protectedFiles=[]}={}) {
+  if (deleted.length) throw new Error(`Deleting files is not permitted: ${deleted.join(', ')}`);
+  if (scripts.length) throw new Error(`Test, lint, typecheck and build scripts may not change: ${scripts.join(', ')}`);
+  if (protectedFiles.length) throw new Error(`Test configuration may not change: ${protectedFiles.join(', ')}`);
+  return true;
+}
+/** Protected scripts that a committed manifest defined and the change removed or redefined; a new script weakens nothing. */
+export function weakenedScripts(before,after) {
+  return Object.keys(before??{}).filter(name=>PROTECTED_SCRIPTS.test(name)&&JSON.stringify(before[name])!==JSON.stringify(after?.[name]));
+}
+const scriptsOf=(path,source)=>{
+  try { return JSON.parse(source).scripts??{}; }
+  catch { throw new Error(`Package manifest is not valid JSON: ${path}`); }
+};
+const committed=path=>{
+  try { return execFileSync('git',['show',`HEAD:${path}`],{encoding:'utf8',stdio:['ignore','pipe','ignore']}); }
+  catch { return null; }
+};
+const gitLines=args=>execFileSync('git',args,{encoding:'utf8'}).split('\0').filter(Boolean);
 function verify() {
   const files=changedFiles();
   validatePaths(files);
   const size=files.reduce((n,f)=>n+(existsSync(f)?lstatSync(f).size:0),0);
   if (size>1200000) throw new Error('Modified payload exceeds 1.2MB');
+  validateNoWeakening({
+    deleted:gitLines(['diff','--name-only','--diff-filter=D','-z','HEAD']),
+    scripts:files.filter(f=>/(^|\/)package\.json$/.test(f)).flatMap(f=>{
+      const before=committed(f);
+      return before===null?[]:weakenedScripts(scriptsOf(f,before),scriptsOf(f,readFileSync(f,'utf8')));
+    }),
+    protectedFiles:files.filter(f=>isProtectedFile(f)&&committed(f)!==null),
+  });
   output('changed',files.length?'true':'false');
-  summary(`Change scope valid: ${files.length} files; ${size} bytes; ${files.join(', ')}`);
+  summary(`Change scope valid: ${files.length} files; ${size} bytes; no deletion, test script or test configuration change; ${files.join(', ')}`);
 }
 if (process.argv[1] && import.meta.url===new URL(`file://${process.argv[1]}`).href) {
   (process.argv[2]==='select'?select():process.argv[2]==='verify'?Promise.resolve(verify()):Promise.reject(new Error('usage: select|verify')))
