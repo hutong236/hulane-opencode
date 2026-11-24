@@ -12,6 +12,8 @@ const second = {
 };
 
 test('Git health errors and retries are isolated to their registered project', async ({ page }) => {
+  // StrictMode may deliver one or two initial requests per row, so answers follow this phase instead of a count.
+  let firstAvailable = false;
   let firstAttempts = 0;
   let secondAttempts = 0;
   await page.route('**/api/projects', route => route.fulfill({
@@ -22,7 +24,7 @@ test('Git health errors and retries are isolated to their registered project', a
     const id = new URL(route.request().url()).pathname.split('/')[3];
     if (id === first.id) {
       firstAttempts++;
-      return route.fulfill(firstAttempts <= 2
+      return route.fulfill(!firstAvailable
         ? { status: 404, body: 'sensitive /private/repo' }
         : { status: 200, contentType: 'application/json',
             body: JSON.stringify({ repoRoot: first.repo_root, headSha: null, branch: 'main', dirty: false }) });
@@ -41,10 +43,14 @@ test('Git health errors and retries are isolated to their registered project', a
   await expect(monitoring.getByText('有未提交修改')).toBeVisible();
   await expect(page.getByText('sensitive /private/repo')).toHaveCount(0);
 
+  const beforeRetry = { first: firstAttempts, second: secondAttempts };
+  firstAvailable = true;
   await cmdb.getByRole('button', { name: '重试状态' }).click();
   await expect(cmdb.getByText('尚无提交')).toBeVisible();
   await expect(cmdb.getByText('工作区干净')).toBeVisible();
   await expect(monitoring.getByText('bbbbbbbbbbbb')).toBeVisible();
-  expect(firstAttempts).toBeGreaterThanOrEqual(3);
-  expect(secondAttempts).toBeGreaterThanOrEqual(1);
+  await expect(monitoring.getByText('有未提交修改')).toBeVisible();
+  // Only the failed row is read again; the healthy one is left alone.
+  expect(firstAttempts).toBeGreaterThan(beforeRetry.first);
+  expect(secondAttempts).toBe(beforeRetry.second);
 });
