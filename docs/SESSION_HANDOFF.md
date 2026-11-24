@@ -554,3 +554,15 @@ npm test
 - Validation: source/log inspection only. New SHA CI and local Playwright **not run/verified** at this checkpoint; real OpenCode CLI not exercised. Exact remote branch HEAD is authoritative after this handoff commit.
 - Risk: the fixture assumes two initial requests in dev; verify exact Node 22 browser results before accepting. Do not close Issue #8 or production Issue #3.
 - Next: inspect fresh Workbench CI Node 20/22 and Hulane CI for this fix; if red, use browser traces to repair the next failing assertion before adding WB-004 project registration UI.
+
+
+### WB-004 — Fix empty-list refresh browser regression (2026-11-20)
+
+- Step / acceptance: On the project list, after an empty response, clicking the Card refresh action must display a newly registered project, regardless of React StrictMode initial request count.
+- Branch: `fix/WB-004-empty-refresh-e2e-20261120`, parent `aa4ce0973b09c5943149345ec61426efbf6cfb23` (stacked on Draft PR #50). Code commit: `013f077ad99dc61973c305db6532f51b9553862a`; authoritative final SHA is remote branch HEAD.
+- Files: `workbench/e2e/project-list.spec.ts`, `docs/SESSION_HANDOFF.md`.
+- Failure evidence: Workbench CI https://github.com/hutong236/hulane-opencode/actions/runs/44732780377 Node 22 failed 1/9 browser cases (8 passed): timeout waiting for `getByRole('button', { name: '刷新' })`; Node 20 succeeded. Hulane CI https://github.com/hutong236/hulane-opencode/actions/runs/44732780438 succeeded.
+- Change: scope click to `.ant-card-extra button` and switch mock response based on explicit refresh phase, rather than relying on exactly two StrictMode initial requests. Keep assertion that the newly returned project appears.
+- Validation: source reviewed against actual `ProjectList.tsx`; local Playwright and real OpenCode CLI **not run**. New commit CI pending and must be checked before claiming pass.
+- Risk: stacked PRs need review; this does not satisfy project registration/Git health UI or production Issue #3.
+- Next: inspect exact SHA Workbench/Hulane CI; fix any failure, then implement project registration and Git health UI controls.
