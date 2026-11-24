@@ -156,3 +156,25 @@ test('rejects symlinked database directories and relative paths', () => {
     assert.throws(() => new WorkbenchDatabase({ dataDirectory: 'relative/path' }), /absolute/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('canonical repository root is unique across slugs and database reopen', () => {
+  const x = fixture();
+  try {
+    const root = join(x.dir, 'registered-repo');
+    const first = x.database.projects.create({ slug: 'cmdb-one', name: 'CMDB', repoRoot: root });
+    assert.equal(x.database.projects.findByRoot(root)?.id, first.id);
+    assert.equal(x.database.projects.findByRoot(join(x.dir, 'unknown')), null);
+    assert.throws(() => x.database.projects.create({
+      slug: 'cmdb-two', name: 'Duplicate root', repoRoot: root,
+    }), /UNIQUE/);
+    x.database.close();
+    const reopened = new WorkbenchDatabase({ dataDirectory: x.dir });
+    try {
+      assert.equal(reopened.projects.findByRoot(root)?.id, first.id);
+      assert.equal((reopened.connection.prepare('SELECT count(*) AS n FROM projects').get() as { n: number }).n, 1);
+      assert.throws(() => reopened.projects.create({
+        slug: 'cmdb-three', name: 'Duplicate after restart', repoRoot: root,
+      }), /UNIQUE/);
+    } finally { reopened.close(); }
+  } finally { x.dispose(); }
+});
