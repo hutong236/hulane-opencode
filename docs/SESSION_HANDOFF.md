@@ -494,3 +494,11 @@ npm test
 - Concurrency: new isolated branch only; connector cannot fully enumerate scheduled half-hour Actions jobs. No write to `main` or shared feature branches.
 - Risk: project UI not yet connected, project status UI and complete WB-004 acceptance outstanding. Issues #8 and #3 remain open.
 - Next atomic task: inspect exact-commit CI and fix failures; then add project list loading/empty/error/retry UI.
+
+
+### WB-004 — project list UI states (2026-11-20)
+- Branch: `feat/WB-004-project-list-ui-20261120-0056`; parent verified `03e699f1e373d4b873d1e6725cc3a1facf1fc5ad` (remote branch SHA after push is authoritative).
+- Scope: connect /projects to validated getProjects() with loading, empty, error/retry, and read-only project table. Abort stale requests on unmount/retry.
+- Validation: parent Workbench CI #44642346340 and Hulane CI #44642346203 succeeded; this commit's CI pending. Local tests/typecheck/browser smoke and real OpenCode CLI not run in connector-only environment.
+- Risks: registration, details, unregister, and live Git status Web controls remain unimplemented; no production acceptance. Issues #8 and #3 stay open.
+- Next: inspect exact new SHA CI; fix any failures, then add browser UI regression/smoke for loading/empty/error/retry.
