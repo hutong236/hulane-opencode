@@ -641,3 +641,11 @@ npm test
 - Concurrency: repository Actions in_progress=0 and queued=0 from GitHub REST before write; remote target HEAD verified.
 - Risk: mock-based Playwright is not real local Git root or production Gate acceptance. Issues #8 and #3 remain open.
 - Next: verify exact new SHA Workbench/Hulane CI; if green, implement actual Git HEAD/branch/dirty health status in Web project list with tests.
+
+### WB-004 — Strict persisted-ID Git status Web client (2026-11-22)
+- Step / acceptance: Add `getProjectStatus(id, signal)` using only validated UUID paths, strict Git status DTO decoding, sanitized HTTP 404/409, malformed response rejection, and preserved AbortError; add Node regression tests.
+- Branch: `feat/WB-004-status-client-20261122`, parent `d062539dd06dd8a958e6f2c60ef81263265a2a99` (stacked on Draft PR #53). Exact remote HEAD after push is authoritative.
+- Files: `workbench/apps/web/src/api/client.ts`, `workbench/apps/web/test/project-git-status.spec.ts`, `docs/SESSION_HANDOFF.md`.
+- Validation: source-level contract checked against `apps/api/src/app.ts` and `repository-status.ts`; Node/TypeScript/Playwright and real OpenCode CLI not executed in this GitHub API session. New SHA Actions CI pending.
+- Safety: GitHub REST Actions collection checked for in_progress/queued jobs before branch update; no production branch write or Gate bypass.
+- Next: verify exact SHA Workbench/Hulane CI, fix any failure first; then render HEAD/branch/dirty in ProjectList with browser regression and unavailable-repo retry.
