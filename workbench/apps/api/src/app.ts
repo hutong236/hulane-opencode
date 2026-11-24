@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import { WorkbenchDatabase } from '@hulane/workbench-database';
 import { validateRepositoryRoot } from './repository-root.js';
 import { readRepositoryStatus } from './repository-status.js';
+import { registerRequirementRoutes } from './requirements.js';
 
 /** Build an application without opening a socket, so tests can use inject(). */
 export function buildApp(options: { database?: WorkbenchDatabase } = {}) {
@@ -90,5 +91,6 @@ export function buildApp(options: { database?: WorkbenchDatabase } = {}) {
       return reply.code(400).send({ error: 'Invalid Git repository root or unreadable status' });
     }
   });
+  registerRequirementRoutes(app, database);
   return app;
 }

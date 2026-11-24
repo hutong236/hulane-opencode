@@ -149,6 +149,26 @@ CREATE INDEX ix_events_run_seq ON execution_events(run_id, seq);
 CREATE INDEX ix_approvals_run ON approvals(run_id, created_at);
 `,
   },
+  {
+    version: 2,
+    name: 'requirement_version_authors_and_immutability',
+    sql: `
+ALTER TABLE requirement_versions ADD COLUMN actor TEXT NOT NULL DEFAULT 'system';
+ALTER TABLE requirement_versions ADD COLUMN summary TEXT NOT NULL DEFAULT '';
+
+CREATE TRIGGER requirement_versions_no_update
+BEFORE UPDATE ON requirement_versions
+BEGIN
+  SELECT RAISE(ABORT, 'requirement_versions rows are immutable');
+END;
+
+CREATE TRIGGER requirement_versions_no_delete
+BEFORE DELETE ON requirement_versions
+BEGIN
+  SELECT RAISE(ABORT, 'requirement_versions rows are immutable');
+END;
+`,
+  },
 ] as const;
 
 export const EXPECTED_TABLES = [

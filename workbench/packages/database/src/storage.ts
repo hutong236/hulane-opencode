@@ -8,6 +8,7 @@ import Sqlite from 'better-sqlite3';
 import { applyMigrations } from './migrate.js';
 import { verifySchema } from './schema.js';
 import { ProjectRepository } from './projects.js';
+import { RequirementRepository } from './requirements.js';
 
 export interface DatabaseOptions {
   dataDirectory?: string;
@@ -48,6 +49,7 @@ export class WorkbenchDatabase {
   readonly path: string;
   readonly connection: Sqlite.Database;
   readonly projects: ProjectRepository;
+  readonly requirements: RequirementRepository;
 
   constructor(options: DatabaseOptions = {}) {
     const directory = ensureSafeDirectory(options.dataDirectory || defaultDataDirectory());
@@ -69,6 +71,7 @@ export class WorkbenchDatabase {
       throw error;
     }
     this.projects = new ProjectRepository(this.connection);
+    this.requirements = new RequirementRepository(this.connection);
   }
 
   transaction<T>(callback: () => T): T {

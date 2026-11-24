@@ -20,8 +20,8 @@ test('fresh database enables WAL, foreign keys and required tables', () => {
     assert.equal(x.database.connection.pragma('busy_timeout', { simple: true }), 50);
     const tables = x.database.connection.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[];
     for (const name of EXPECTED_TABLES) assert.ok(tables.some(t => t.name === name), name);
-    assert.equal(x.database.connection.pragma('user_version', { simple: true }), 1);
-    assert.equal(applyMigrations(x.database.connection), 1);
+    assert.equal(x.database.connection.pragma('user_version', { simple: true }), 2);
+    assert.equal(applyMigrations(x.database.connection), 2);
   } finally { x.dispose(); }
 });
 
@@ -74,15 +74,15 @@ test('failed migration rolls back DDL and can retry corrected version', () => {
   try {
     const invalid = [
       ...BASE_MIGRATIONS,
-      { version: 2, name: 'second', sql: 'CREATE TABLE incomplete_table(id TEXT); INVALID SQL;' },
+      { version: 3, name: 'third', sql: 'CREATE TABLE incomplete_table(id TEXT); INVALID SQL;' },
     ];
     assert.throws(() => applyMigrations(x.database.connection, invalid));
-    assert.equal(x.database.connection.pragma('user_version', { simple: true }), 1);
-    assert.equal((x.database.connection.prepare('SELECT count(*) AS n FROM schema_migrations').get() as { n: number }).n, 1);
+    assert.equal(x.database.connection.pragma('user_version', { simple: true }), 2);
+    assert.equal((x.database.connection.prepare('SELECT count(*) AS n FROM schema_migrations').get() as { n: number }).n, 2);
     assert.equal((x.database.connection.prepare("SELECT count(*) AS n FROM sqlite_master WHERE name='incomplete_table'").get() as { n: number }).n, 0);
     assert.equal(applyMigrations(x.database.connection, [
-      ...BASE_MIGRATIONS, { version: 2, name: 'second', sql: 'CREATE TABLE completed_table(id TEXT);' },
-    ]), 2);
+      ...BASE_MIGRATIONS, { version: 3, name: 'third', sql: 'CREATE TABLE completed_table(id TEXT);' },
+    ]), 3);
     assert.throws(() => applyMigrations(x.database.connection), /Unsafe database downgrade/);
   } finally { x.dispose(); }
 });
@@ -127,9 +127,9 @@ test('migration checksums prevent changing previously installed SQL', () => {
     const altered = [{
       ...BASE_MIGRATIONS[0],
       sql: `${BASE_MIGRATIONS[0].sql}\n-- Unauthorized migration modification`,
-    }];
+    }, ...BASE_MIGRATIONS.slice(1)];
     assert.throws(() => applyMigrations(x.database.connection, altered), /Migration history mismatch/);
-    assert.equal(x.database.connection.pragma('user_version', { simple: true }), 1);
+    assert.equal(x.database.connection.pragma('user_version', { simple: true }), 2);
   } finally { x.dispose(); }
 });
 
