@@ -1,3 +1,13 @@
+### WB-004 checkpoint — 2026-11-22: per-project live Git health UI
+
+- Task: render persisted-ID Git health in the registered-project table (short HEAD, live branch, dirty/clean), with isolated stale-repository error and retry.
+- Branch: `feat/WB-004-project-health-ui-20261122`; parent: `5174952ef360a776f3a247ce782c5886d22c7c3a`; authoritative new SHA is the remote branch head.
+- Files: `workbench/apps/web/src/components/ProjectList.tsx`, `workbench/e2e/project-list.spec.ts`, `docs/SESSION_HANDOFF.md`.
+- Acceptance: each registered row queries only its UUID-based status endpoint; 409 errors are redacted, retry is per row, and pending requests abort on refresh/unmount.
+- Validation: source-level inspection only. Local TypeScript/Playwright and real OpenCode CLI **not run**; this commit's GitHub Actions pending until verified.
+- Concurrency: REST Actions in_progress=0 and queued=0 immediately before isolated branch write. No production branch changes.
+- Next: inspect exact commit Workbench/Hulane CI and fix any failure first; then complete WB-004 remaining registration/unregister and real three-repository E2E acceptance. Issues #8 and #3 stay open.
+
 ### WB-004 checkpoint — 2026-11-22: persisted-ID Git health endpoint
 
 - Task: expose read-only `GET /api/projects/:id/status` for registered repositories only, with UUID validation, missing project handling and fail-closed stale-root response.
