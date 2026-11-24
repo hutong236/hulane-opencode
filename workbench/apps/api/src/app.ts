@@ -42,6 +42,25 @@ export function buildApp(options: { database?: WorkbenchDatabase } = {}) {
     if (!project) return reply.code(404).send({ error: 'Project not found' });
     return project;
   });
+  // Rename the catalog entry only. The revision must be the one the caller saw, so two editors cannot overwrite each other.
+  app.patch<{ Params: { id: string }; Body: { name?: unknown; revision?: unknown } }>('/api/projects/:id', async (request, reply) => {
+    const id = request.params.id;
+    const body = request.body;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      return reply.code(400).send({ error: 'Invalid project ID' });
+    }
+    if (!body || typeof body.name !== 'string' || !body.name.trim() || body.name.trim().length > 120 ||
+        !Number.isSafeInteger(body.revision) || (body.revision as number) < 0) {
+      return reply.code(400).send({ error: 'Invalid project update' });
+    }
+    const projects = database().projects;
+    if (!projects.find(id)) return reply.code(404).send({ error: 'Project not found' });
+    // A stale revision means the project was renamed since the caller loaded it: never overwrite that change.
+    if (!projects.updateName(id, body.revision as number, body.name)) {
+      return reply.code(409).send({ error: 'Project changed since it was loaded' });
+    }
+    return projects.find(id);
+  });
   // Resolve status only from a persisted project ID; clients cannot substitute an arbitrary path.
   app.get<{ Params: { id: string } }>('/api/projects/:id/status', async (request, reply) => {
     const id = request.params.id;

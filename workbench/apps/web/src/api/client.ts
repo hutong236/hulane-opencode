@@ -104,6 +104,36 @@ export async function registerProject(input: { path: string; slug: string; name:
   return decodeProjectList({ projects: [payload] })[0]!;
 }
 
+/** Rename the catalog entry only. `revision` must be the one the caller loaded, so a newer rename is never overwritten. */
+export async function renameProject(id: string, input: { name: string; revision: number }, signal?: AbortSignal): Promise<RegisteredProject> {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    throw new ApiError('项目 ID 无效', 400);
+  }
+  if (!Number.isSafeInteger(input.revision) || input.revision < 0) {
+    throw new ApiError('项目信息已过期，请刷新列表后重试', 409);
+  }
+  if (!input.name.trim() || input.name.trim().length > 120) throw new ApiError('项目名称需为 1–120 个字符', 400);
+  let response: Response;
+  try {
+    response = await fetch(`/api/projects/${id}`, {
+      method: 'PATCH', signal, cache: 'no-store',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: input.name, revision: input.revision }),
+    });
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    throw new ApiError('无法连接本地 API，请确认服务已启动');
+  }
+  if (response.status === 404) throw new ApiError('项目不存在', 404);
+  if (response.status === 409) throw new ApiError('项目已被其他操作修改，请关闭后刷新列表再重试', 409);
+  if (response.status === 400) throw new ApiError('项目名称无效', 400);
+  if (!response.ok) throw new ApiError(`API 请求失败：HTTP ${response.status}`, response.status);
+  let payload: unknown;
+  try { payload = await response.json(); }
+  catch { throw new ApiError('API 返回无效 JSON', response.status); }
+  return decodeProjectList({ projects: [payload] })[0]!;
+}
+
 /** Live Git status for a registered project; never accepts an arbitrary filesystem path. */
 export interface ProjectGitStatus {
   repoRoot: string;

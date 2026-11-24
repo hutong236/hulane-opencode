@@ -240,3 +240,37 @@ test('registrations survive an API restart and the unregistered files are still 
   expect(await listedSlugs(page)).toEqual(['cmdb', 'monitoring']);
   expect(existsSync(join(world.repositories.automation, '.git'))).toBe(true);
 });
+
+test('a project can be renamed and the new name survives a restart without touching the repository', async ({ page }) => {
+  await openProjects(page);
+  const cmdb = async () => {
+    const response = await page.request.get(`${world.api!.origin}/api/projects`);
+    const projects = (await response.json()).projects as { slug: string; name: string; revision: number }[];
+    return projects.find(project => project.slug === 'cmdb');
+  };
+  await expect(row(page, 'CMDB').getByText('工作区干净')).toBeVisible();
+  const headBefore = git(world.repositories.cmdb, 'rev-parse', 'HEAD');
+  const changesBefore = changes(world.repositories.cmdb);
+  expect((await cmdb())?.revision).toBe(1);
+
+  await row(page, 'CMDB').getByRole('button', { name: '重命名' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('textbox', { name: '项目名称' }).fill('CMDB Core');
+  await dialog.getByRole('button', { name: '保存名称' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(row(page, 'CMDB Core').getByText('工作区干净')).toBeVisible();
+  await expect(row(page, 'CMDB')).toHaveCount(0);
+  await expect(row(page, 'MONITORING').getByText('尚无提交')).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  expect(await cmdb()).toMatchObject({ name: 'CMDB Core', revision: 2 });
+  // A rename is a catalog change only: same commit, same working tree, same files.
+  expect(git(world.repositories.cmdb, 'rev-parse', 'HEAD')).toBe(headBefore);
+  expect(changes(world.repositories.cmdb)).toBe(changesBefore);
+
+  await world.api!.stop();
+  world.api = await startApi(dirname(test.info().config.configFile!), world.dataDirectory);
+  await openProjects(page);
+  await expect(row(page, 'CMDB Core').getByText('工作区干净')).toBeVisible();
+  expect(await cmdb()).toMatchObject({ name: 'CMDB Core', revision: 2 });
+  expect(await listedSlugs(page)).toEqual(['cmdb', 'monitoring']);
+});
