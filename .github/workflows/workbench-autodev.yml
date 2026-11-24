@@ -146,7 +146,7 @@ jobs:
             tail -c 6000 "$RUNNER_TEMP/wb-implement.log"
             echo
             echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
           echo "OpenCode exited with status $status"
           test "$status" -eq 0
       - name: Verify change scope
@@ -161,16 +161,15 @@ jobs:
         run: |
           set -uo pipefail
           declare -A result
-          # run <name> <command...>: records PASS or FAIL and prints the tail of a failing command's output.
+          # run <name> <command...>: streams the output into the job log and records PASS or FAIL.
           run() {
             local name="$1"
             shift
             echo "::group::$name"
-            if "$@" > "$RUNNER_TEMP/wb-$name.log" 2>&1; then
+            if "$@" 2>&1 | tee "$RUNNER_TEMP/wb-$name.log"; then
               result["$name"]=PASS
             else
               result["$name"]=FAIL
-              tail -n 60 "$RUNNER_TEMP/wb-$name.log"
             fi
             echo "::endgroup::"
           }
@@ -207,7 +206,7 @@ jobs:
             echo "$summary"
             echo
             echo "Result: $pass"
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
           echo "checks pass: $pass"
           test "$pass" = true
       - name: Show the unpublished change
@@ -234,7 +233,7 @@ jobs:
             echo '```'
             echo
             echo '</details>'
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Publish Draft pull request
         if: steps.configured.outputs.enabled == 'true' && steps.verify.outputs.changed == 'true' && steps.checks.outputs.pass == 'true' && (github.event_name == 'schedule' || inputs.publish)
         env:
