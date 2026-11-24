@@ -1,3 +1,13 @@
+### WB-004 checkpoint — 2026-11-22: multi-project Git health isolation regression
+
+- Task: add Playwright regression for two registered project rows, one 404 error and one healthy dirty repository; retry only the failed row.
+- Branch: `test/WB-004-health-isolation-20261122`; parent: `8e0c54bffc4f6822a2be6e88e07872be7d1b10e8`; new remote SHA is authoritative at the branch ref.
+- Files: `workbench/e2e/project-health-isolation.spec.ts`, `docs/SESSION_HANDOFF.md`.
+- Acceptance: missing-project error is redacted, healthy project remains visible, failed project can recover independently, and no other row loses its status.
+- Validation: source-level review only; local Playwright/TypeScript and real OpenCode CLI not run. This commit's Actions status must be checked separately.
+- Concurrency: repository-level REST Actions reported in_progress=0 and queued=0 before isolated branch creation.
+- Next: check this commit's Workbench and Hulane CI; fix failures first, then complete WB-004 unregister UI and real three-repository E2E. Issues #8 and #3 remain open.
+
 ### WB-004 checkpoint — 2026-11-22: per-project live Git health UI
 
 - Task: render persisted-ID Git health in the registered-project table (short HEAD, live branch, dirty/clean), with isolated stale-repository error and retry.
