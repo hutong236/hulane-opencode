@@ -47,6 +47,11 @@ export class ProjectRepository {
     return (this.db.prepare('SELECT * FROM projects WHERE repo_root = ?').get(repoRoot) as Project | undefined) ?? null;
   }
 
+  /** Stable ordering for the project registry; no local repository is opened. */
+  list(): Project[] {
+    return this.db.prepare('SELECT * FROM projects ORDER BY created_at ASC, id ASC').all() as Project[];
+  }
+
   updateName(id: string, expectedRevision: number, name: string): Project | null {
     if (!name.trim()) throw new Error('Project name is required');
     const result = this.db.prepare(`

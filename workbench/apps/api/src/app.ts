@@ -30,6 +30,8 @@ export function buildApp(options: { database?: WorkbenchDatabase } = {}) {
       throw error;
     }
   });
+  // Read persisted metadata only: listing must not execute Git or inspect user files.
+  app.get('/api/projects', async () => ({ projects: database().projects.list() }));
   // Return only persisted registration metadata; never touch or delete the repository.
   app.get<{ Params: { id: string } }>('/api/projects/:id', async (request, reply) => {
     const id = request.params.id;

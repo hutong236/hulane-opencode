@@ -464,3 +464,12 @@ npm test
 - Regression: Fastify inject test registers a real temporary Git repository, checks exact stored record, malformed ID and missing ID.
 - Validation: local npm tests/typecheck **not run** in GitHub API-only environment; CI on the new commit is pending until verified. Parent PR #40 Workbench CI #44539518268 and Hulane CI #44539518237 succeeded; real OpenCode CLI not exercised.
 - Next: inspect exact new commit CI, then implement project listing and deletion of registration without deleting Git files. Do not close Issues #8/#3 or merge production.
+
+
+### WB-004 — SQLite project list API (2026-11-19)
+- Branch: `feat/WB-004-project-list-20261119`; parent: `e875f6cca87b88557432a5cbb8a4b49f71dbc04b`; Draft PR follows branch creation.
+- Acceptance: GET /api/projects returns 200 with an empty array or persisted project metadata in deterministic created_at/id order; no filesystem/Git access during listing.
+- Changed: database ProjectRepository.list(), Fastify GET route, new project-list.spec.ts regression, this handoff.
+- Validation: GitHub connector-only edit; local npm test/typecheck **not run**; new SHA CI must be checked after push. Parent SHA Workbench CI 44560530322 and Hulane CI 44560530218 both succeeded. Real OpenCode CLI not exercised.
+- Risk: list currently unpaginated; project registry UI and safe unregister remain outstanding. Issue #8 and production Issue #3 remain open.
+- Next atomic task: check new SHA CI and repair any failures; otherwise implement safe project unregister without deleting repository files.
