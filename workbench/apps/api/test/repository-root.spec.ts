@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, symlink, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { test } from 'node:test';
 import { validateRepositoryRoot } from '../src/repository-root.ts';
+import { fixturePrefix } from './fixture-prefix.js';
 
 test('accepts canonical Git roots and rejects nested, non-Git and symlink paths', async () => {
-  const temp = await mkdtemp(join(tmpdir(), 'wb-repo-root-'));
+  const temp = await mkdtemp(fixturePrefix('wb-repo-root-'));
   try {
     const repo = join(temp, 'repo');
     await mkdir(repo);
@@ -26,7 +26,7 @@ test('accepts canonical Git roots and rejects nested, non-Git and symlink paths'
 });
 
 test('rejects bare repositories and ignores inherited Git redirection variables', async () => {
-  const temp = await mkdtemp(join(tmpdir(), 'wb-repo-git-env-'));
+  const temp = await mkdtemp(fixturePrefix('wb-repo-git-env-'));
   try {
     const valid = join(temp, 'valid');
     const bare = join(temp, 'bare.git');
@@ -50,7 +50,7 @@ test('rejects bare repositories and ignores inherited Git redirection variables'
 
 
 test('ignores injected Git config and object-directory environment overrides', async () => {
-  const temp = await mkdtemp(join(tmpdir(), 'wb-repo-git-config-'));
+  const temp = await mkdtemp(fixturePrefix('wb-repo-git-config-'));
   const keys = ['GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0', 'GIT_CONFIG_VALUE_0', 'GIT_OBJECT_DIRECTORY'];
   const previous = new Map(keys.map((key) => [key, process.env[key]]));
   try {

@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { WorkbenchDatabase } from '@hulane/workbench-database';
 import { buildApp } from '../src/app.js';
+import { fixturePrefix } from './fixture-prefix.js';
 
 test('persisted project ID status reports Git changes and fails closed on missing roots', async () => {
-  const temp = mkdtempSync(join(tmpdir(), 'wb-status-id-'));
+  const temp = mkdtempSync(fixturePrefix('wb-status-id-'));
   const repo = join(temp, 'repo');
   execFileSync('git', ['init', '-q', repo]);
   execFileSync('git', ['-C', repo, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid',

@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { readRepositoryStatus } from '../src/repository-status.ts';
+import { fixturePrefix } from './fixture-prefix.js';
 
 test('reads real branch, HEAD and dirty status without modifying the repository', async () => {
-  const temp = await mkdtemp(join(tmpdir(), 'wb-repo-status-'));
+  const temp = await mkdtemp(fixturePrefix('wb-repo-status-'));
   try {
     const repo = join(temp, 'repo');
     await mkdir(repo);
@@ -34,7 +34,7 @@ test('reads real branch, HEAD and dirty status without modifying the repository'
 });
 
 test('rejects nested paths rather than silently reading a parent repository', async () => {
-  const temp = await mkdtemp(join(tmpdir(), 'wb-repo-status-nested-'));
+  const temp = await mkdtemp(fixturePrefix('wb-repo-status-nested-'));
   try {
     const repo = join(temp, 'repo');
     await mkdir(repo);
@@ -47,7 +47,7 @@ test('rejects nested paths rather than silently reading a parent repository', as
 });
 
 test('unborn Git repository reports null HEAD and detects staged changes', async () => {
-  const temp = await mkdtemp(join(tmpdir(), 'wb-repo-status-unborn-'));
+  const temp = await mkdtemp(fixturePrefix('wb-repo-status-unborn-'));
   try {
     const repo = join(temp, 'repo');
     await mkdir(repo);

@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { WorkbenchDatabase } from '@hulane/workbench-database';
 import { buildApp } from '../src/app.js';
+import { fixturePrefix } from './fixture-prefix.js';
 
 test('unregister removes SQLite metadata only and preserves Git repository files', async () => {
-  const temp = mkdtempSync(join(tmpdir(), 'wb-unregister-'));
+  const temp = mkdtempSync(fixturePrefix('wb-unregister-'));
   const repo = join(temp, 'repo');
   const db = new WorkbenchDatabase({ dataDirectory: join(temp, 'data') });
   const app = buildApp({ database: db });
