@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { codeOf, dependencies, selectWork, validatePaths } from '../bin/workbench-autodev.mjs';
+import { codeOf, dependencies, selectWork, validateNoWeakening, validatePaths, weakenedScripts } from '../bin/workbench-autodev.mjs';
 const make=()=>Array.from({length:28},(_,i)=>({
   number:i+5,title:`[WB-${String(i+1).padStart(3,'0')}] Task`,state:'open',
   body:i?'## 前置依赖\n- WB-001\n\n## 验收条件\n- WB-028':'## 依赖\n- 无'
@@ -36,4 +36,19 @@ test('does not modify fork PR or privileged file paths',()=>{
   assert.throws(()=>validatePaths(['workbench/.env.local']),/Secret-like/);
   assert.throws(()=>validatePaths(['workbench/secret.pem']),/Secret-like/);
   assert.throws(()=>validatePaths(Array.from({length:31},(_,i)=>`workbench/file${i}`)),/30/);
+});
+test('an autonomous change cannot remove the checks that judge it',()=>{
+  assert.equal(validateNoWeakening({}),true);
+  assert.throws(()=>validateNoWeakening({deleted:['workbench/apps/api/test/health.spec.ts']}),/Deleting files/);
+  assert.throws(()=>validateNoWeakening({scripts:['test']}),/scripts may not change/);
+  assert.throws(()=>validateNoWeakening({scripts:['lint','typecheck','build']}),/scripts may not change/);
+  assert.throws(()=>validateNoWeakening({protectedFiles:['workbench/playwright.config.ts']}),/configuration may not change/);
+});
+test('a protected script counts as weakened only when an existing definition is removed or redefined',()=>{
+  const before={test:'node --test',build:'tsc','test:e2e':'playwright test'};
+  assert.deepEqual(weakenedScripts(before,{...before}),[]);
+  assert.deepEqual(weakenedScripts(before,{...before,test:'echo ok'}),['test']);
+  assert.deepEqual(weakenedScripts(before,{build:'tsc','test:e2e':'playwright test'}),['test']);
+  assert.deepEqual(weakenedScripts(before,{...before,'test:e2e':'true',lint:'true',dev:'vite'}),['test:e2e']);
+  assert.deepEqual(weakenedScripts({}, {test:'true'}),[]);
 });
