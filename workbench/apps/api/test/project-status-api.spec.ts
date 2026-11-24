@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { buildApp } from '../src/app.js';
+import { fixturePrefix } from './fixture-prefix.js';
 
 test('status API reports real Git branch, HEAD and dirty state and rejects unsafe paths', async () => {
-  const temp = await mkdtemp(join(tmpdir(), 'wb-api-status-'));
+  const temp = await mkdtemp(fixturePrefix('wb-api-status-'));
   const app = buildApp();
   try {
     const root = join(temp, 'repo');

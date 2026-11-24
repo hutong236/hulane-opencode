@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { readRepositoryStatus } from '../src/repository-status.js';
+import { fixturePrefix } from './fixture-prefix.js';
 
 test('Git status does not execute repository-configured fsmonitor command', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'wb-fsmonitor-'));
+  const directory = await mkdtemp(fixturePrefix('wb-fsmonitor-'));
   try {
     const repo = join(directory, 'repo');
     const marker = join(directory, 'fsmonitor-executed');

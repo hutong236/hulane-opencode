@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, rm, symlink } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { buildApp } from '../src/app.js';
+import { fixturePrefix } from './fixture-prefix.js';
 
 test('validation endpoint rejects nested and symlinked Git paths without disclosing local paths', async () => {
-  const temp = await mkdtemp(join(tmpdir(), 'wb-api-path-guards-'));
+  const temp = await mkdtemp(fixturePrefix('wb-api-path-guards-'));
   const app = buildApp();
   try {
     const root = join(temp, 'repo');

@@ -1,3 +1,14 @@
+### WB-004 checkpoint — 2026-11-24: API test fixtures run on macOS
+
+- Task: make the Workbench API test suite pass on macOS with its default temporary directory.
+- Branch: `fix/WB-004-api-temp-root-20261124` (Draft PR stacked on #60); parent: `d5b11cd8900df87398104aa2bf1cb8c4cf1a094e`. The remote branch head is the authoritative SHA.
+- Files: new `workbench/apps/api/test/fixture-prefix.ts`; the 12 spec files under `workbench/apps/api/test/` that created fixtures with `join(tmpdir(), …)`; `docs/SESSION_HANDOFF.md`. No product code changed.
+- Cause: macOS places its default temp directory below `/var`, a symlink to `/private/var`. The repository and database path guards reject any symlinked path component, so fixtures created from the raw `tmpdir()` were refused: 15 of 17 cases failed at `ec9756c3`. CI never showed it because Ubuntu's `/tmp` is not a symlink.
+- Change: `fixturePrefix(prefix)` returns the prefix below the resolved real temp path, and every API fixture now uses it, as the database package tests already did inline.
+- Validation (local macOS arm64, Node v24.3.0, default `TMPDIR` below `/var/folders`): API tests 18/18, web 26/26, database 12/12; `npm run lint`, `npm run typecheck` and `npm run build` passed. With the symlink check removed from `repository-root.ts` as a deliberate breakage, `accepts canonical Git roots and rejects nested, non-Git and symlink paths` fails, so the portability change did not empty the symlink assertions. CI for the pushed SHA is pending until observed.
+- Parent CI: `d5b11cd8` Workbench CI [45420146461](https://github.com/hutong236/hulane-opencode/actions/runs/45420146461) (push) and [45420221661](https://github.com/hutong236/hulane-opencode/actions/runs/45420221661) (pull_request); Hulane OpenCode CI [45420222009](https://github.com/hutong236/hulane-opencode/actions/runs/45420222009) (pull_request, 6/6). All completed with success and the new multi-repository case ran on Node 20 and 22.
+- Next: read CI for this exact SHA; then add the real three-repository browser E2E. Issues #8 and #3 stay open; no merge, Gate bypass or production claim.
+
 ### WB-004 checkpoint — 2026-11-24: multi-repository unregister keeps files and other registrations
 
 - Task: turn "unregister deletes no repository file" into an API regression that runs in CI against real Git repositories and SQLite.

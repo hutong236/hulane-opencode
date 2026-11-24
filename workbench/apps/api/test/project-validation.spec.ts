@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { buildApp } from '../src/app.js';
+import { fixturePrefix } from './fixture-prefix.js';
 
 test('repository validation API accepts a real root and fails closed for invalid input', async () => {
-  const temp = await mkdtemp(join(tmpdir(), 'wb-project-api-'));
+  const temp = await mkdtemp(fixturePrefix('wb-project-api-'));
   const app = buildApp();
   try {
     const root = join(temp, 'repo');

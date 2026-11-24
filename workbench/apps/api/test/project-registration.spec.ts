@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { WorkbenchDatabase } from '@hulane/workbench-database';
 import { buildApp } from '../src/app.js';
+import { fixturePrefix } from './fixture-prefix.js';
 
 test('project registration validates, rejects duplicates and persists after database reopen', async () => {
-  const temp = mkdtempSync(join(tmpdir(), 'wb-register-'));
+  const temp = mkdtempSync(fixturePrefix('wb-register-'));
   const repo = join(temp, 'repo');
   execFileSync('git', ['init', '-q', repo]);
   const dataDirectory = join(temp, 'data');

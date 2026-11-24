@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { WorkbenchDatabase } from '@hulane/workbench-database';
 import { buildApp } from '../src/app.js';
+import { fixturePrefix } from './fixture-prefix.js';
 
 // Commits need an identity; hooks and signing from a developer's global Git config must not interfere.
 const isolated = ['-c', 'user.name=Workbench Test', '-c', 'user.email=test@example.invalid',
@@ -59,8 +59,7 @@ function createRepository(repoRoot: string, kind: 'clean' | 'dirty' | 'unborn'):
 interface ListedProject { id: string; slug: string }
 
 test('unregistering one repository leaves the other registrations and every workspace file intact', async () => {
-  // macOS hands out its temp directory below the /var symlink, which the path guards reject.
-  const temp = mkdtempSync(join(realpathSync(tmpdir()), 'wb-unregister-isolation-'));
+  const temp = mkdtempSync(fixturePrefix('wb-unregister-isolation-'));
   const dataDirectory = join(temp, 'data');
   mkdirSync(join(temp, 'repositories'));
   const repositories = {
