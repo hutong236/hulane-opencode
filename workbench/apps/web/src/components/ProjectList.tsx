@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Card, Empty, Form, Input, Space, Table, Typography } from 'antd';
-import { ApiError, getProjectStatus, getProjects, registerProject, type ProjectGitStatus, type RegisteredProject } from '../api/client';
+import { ConfirmAction } from './UiPrimitives';
+import {
+  ApiError, getProjectStatus, getProjects, registerProject, unregisterProject,
+  type ProjectGitStatus, type RegisteredProject,
+} from '../api/client';
 
 type ListState =
   | { status: 'loading' }
@@ -44,15 +48,24 @@ export function ProjectList() {
   const [form] = Form.useForm<RegistrationFields>();
   const [submitting, setSubmitting] = useState(false);
   const [registrationError, setRegistrationError] = useState('');
+  const [unregistering, setUnregistering] = useState<string | null>(null);
+  const [unregisterError, setUnregisterError] = useState<{ name: string; message: string } | null>(null);
   const mounted = useRef(true);
   const pending = useRef<AbortController | null>(null);
+  const unregisterPending = useRef<AbortController | null>(null);
   useEffect(() => {
     mounted.current = true;
-    return () => { mounted.current = false; pending.current?.abort(); };
+    return () => {
+      mounted.current = false;
+      pending.current?.abort();
+      unregisterPending.current?.abort();
+    };
   }, []);
   useEffect(() => {
     const controller = new AbortController();
     setState({ status: 'loading' });
+    // A failed unregister is reported for the list it happened on, not for a re-read one.
+    setUnregisterError(null);
     getProjects(controller.signal).then(projects => {
       if (!controller.signal.aborted) setState({ status: 'ready', projects });
     }).catch(error => {
@@ -83,6 +96,30 @@ export function ProjectList() {
       if (mounted.current && !controller.signal.aborted) setSubmitting(false);
     }
   };
+  /** Settles when the request does: the pending promise keeps the confirmation open, a settled one closes it. */
+  const unregister = async (project: RegisteredProject): Promise<void> => {
+    // One DELETE at a time, guarded synchronously because a double confirm can precede the re-render.
+    if (unregisterPending.current) return;
+    const controller = new AbortController();
+    unregisterPending.current = controller;
+    setUnregistering(project.id);
+    setUnregisterError(null);
+    try {
+      await unregisterProject(project.id, controller.signal);
+      if (!mounted.current || controller.signal.aborted) return;
+      retry();
+    } catch (error) {
+      // Only the catalog entry is ever removed, so a failed request leaves the row in place.
+      if (!mounted.current || controller.signal.aborted) return;
+      setUnregisterError({
+        name: project.name,
+        message: error instanceof ApiError ? error.message : '取消登记失败，请重试',
+      });
+    } finally {
+      if (unregisterPending.current === controller) unregisterPending.current = null;
+      if (mounted.current) setUnregistering(null);
+    }
+  };
   return <Space direction="vertical" size="large" style={{ width: '100%' }}>
     <Card title="登记本地 Git 仓库">
       <Form form={form} layout="vertical" onFinish={values => void submit(values)} autoComplete="off">
@@ -102,10 +139,12 @@ export function ProjectList() {
         <Button type="primary" htmlType="submit" loading={submitting}>登记仓库</Button>
       </Form>
     </Card>
-    <Card title="已登记项目" extra={<Button onClick={retry} disabled={state.status === 'loading'}>刷新</Button>}>
+    <Card title="已登记项目" extra={<Button onClick={retry} disabled={state.status === 'loading' || unregistering !== null}>刷新</Button>}>
       {state.status === 'error' && <Alert type="error" showIcon message="项目列表加载失败"
         description={<Space direction="vertical"><Typography.Text>{state.message}</Typography.Text>
           <Button onClick={retry}>重试加载</Button></Space>} />}
+      {unregisterError && <Alert type="error" showIcon message={`取消登记「${unregisterError.name}」失败`}
+        description={unregisterError.message} style={{ marginBottom: 16 }} />}
       {state.status === 'loading' && <Table loading dataSource={[]} columns={[]} pagination={false}
         aria-label="项目列表加载中" />}
       {state.status === 'ready' && (state.projects.length === 0
@@ -117,6 +156,11 @@ export function ProjectList() {
               { title: '默认分支', dataIndex: 'default_branch', key: 'default_branch' },
               { title: '本地仓库', dataIndex: 'repo_root', key: 'repo_root', ellipsis: true },
               { title: '实时 Git 状态', key: 'git-health', render: (_: unknown, item: RegisteredProject) => <ProjectHealth key={item.id} id={item.id} /> },
+              { title: '操作', key: 'actions', render: (_: unknown, item: RegisteredProject) => <ConfirmAction
+                  label="取消登记" size="small" danger loading={unregistering === item.id} disabled={unregistering !== null}
+                  title={`确认取消登记「${item.name}」？`} okText="确认取消登记" cancelText="保留登记"
+                  description={`只会移除工作台中的登记记录，不会删除本地仓库文件、分支或未提交的修改。\n仓库目录：${item.repo_root}`}
+                  onConfirm={() => unregister(item)} /> },
             ]} />)}
     </Card>
   </Space>;
