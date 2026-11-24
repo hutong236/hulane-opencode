@@ -136,3 +136,22 @@ export async function getProjectStatus(id: string, signal?: AbortSignal): Promis
     throw error;
   }
 }
+
+/** Unregister only the catalog entry. Never sends a filesystem path or deletes repository files. */
+export async function unregisterProject(id: string, signal?: AbortSignal): Promise<void> {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    throw new ApiError('项目 ID 无效', 400);
+  }
+  let response: Response;
+  try {
+    response = await fetch(`/api/projects/${id}`, {
+      method: 'DELETE', signal, cache: 'no-store', headers: { Accept: 'application/json' },
+    });
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    throw new ApiError('无法连接本地 API，请确认服务已启动');
+  }
+  if (response.status === 404) throw new ApiError('项目不存在', 404);
+  if (!response.ok) throw new ApiError(`API 请求失败：HTTP ${response.status}`, response.status);
+  if (response.status !== 204) throw new ApiError('API 返回意外的删除结果', response.status);
+}
