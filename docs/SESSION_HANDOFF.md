@@ -473,3 +473,14 @@ npm test
 - Validation: GitHub connector-only edit; local npm test/typecheck **not run**; new SHA CI must be checked after push. Parent SHA Workbench CI 44560530322 and Hulane CI 44560530218 both succeeded. Real OpenCode CLI not exercised.
 - Risk: list currently unpaginated; project registry UI and safe unregister remain outstanding. Issue #8 and production Issue #3 remain open.
 - Next atomic task: check new SHA CI and repair any failures; otherwise implement safe project unregister without deleting repository files.
+
+
+### WB-004 — SQLite-only safe project unregister (2026-11-19)
+
+- Isolated branch: `feat/WB-004-safe-unregister-20261119-2005`, based on verified list endpoint SHA `955ea6a53a2970e87977f10eda9c3b3018f6e575`; no writes to existing development branches.
+- Scope: `DELETE /api/projects/:id` with UUID guard, 204 on successful unregister, 400 for malformed IDs and 404 for missing IDs; `ProjectRepository.delete` executes only `DELETE FROM projects WHERE id = ?` in SQLite.
+- Regression: `project-unregister.spec.ts` registers a real temporary Git repository, checks 204/400/404, absence of registration after deletion, preservation of `.git` and a user marker file, and no filesystem path in errors.
+- Validation: source/test authored via GitHub connector; local npm test/typecheck **not run**. Parent list SHA Workbench CI #44572313223 and Hulane CI #44572313392 completed successfully; new SHA CI must be checked independently. Real OpenCode CLI not exercised.
+- Concurrency: this change is isolated on a newly named branch; no writes to main or active half-hour automation branches. Repository-wide active Actions cannot be conclusively enumerated through this connector.
+- Risk: UI, live health status and full WB-004 acceptance remain outstanding; Issue #8 and production Issue #3 remain open.
+- Next: inspect this branch's exact CI and fix failures first, then implement project management Web UI and real Git health display.
