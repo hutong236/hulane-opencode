@@ -5,7 +5,9 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const include = /\.(?:ts|tsx|js|mjs|json)$/;
-const ignored = new Set(['node_modules', 'dist', 'build', 'coverage', '.git']);
+// Dependencies, build output and the reports Playwright writes after a run are not source.
+const ignored = new Set(['node_modules', 'dist', 'build', 'coverage', '.git',
+  'test-results', 'playwright-report', 'blob-report']);
 
 export function lintText(text, name = '<input>') {
   const errors = [];
@@ -31,8 +33,13 @@ function walk(dir) {
   return files;
 }
 
+/** Lint every source file below `dir`; returns one message per violation. */
+export function lintDirectory(dir) {
+  return walk(dir).flatMap(path => lintText(readFileSync(path, 'utf8'), relative(dir, path)));
+}
+
 if (process.argv[1] && fileURLToPath(import.meta.url) === fileURLToPath(new URL(`file://${process.argv[1]}`))) {
-  const errors = walk(root).flatMap(path => lintText(readFileSync(path, 'utf8'), relative(root, path)));
+  const errors = lintDirectory(root);
   if (errors.length) {
     console.error(errors.join('\n'));
     process.exitCode = 1;
