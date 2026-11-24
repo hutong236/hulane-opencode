@@ -76,3 +76,30 @@ export function decodeProjectList(value: unknown): RegisteredProject[] {
 export function getProjects(signal?: AbortSignal): Promise<RegisteredProject[]> {
   return requestJson('/api/projects', decodeProjectList, signal);
 }
+
+/** Register a local Git repository. Server-side realpath/Git validation remains authoritative. */
+export async function registerProject(input: { path: string; slug: string; name: string }, signal?: AbortSignal): Promise<RegisteredProject> {
+  if (!input.path.startsWith('/') || !/^[a-z0-9][a-z0-9-]{1,63}$/.test(input.slug) || !input.name.trim()) {
+    throw new ApiError('请填写有效的绝对路径、项目标识和名称', 400);
+  }
+  let response: Response;
+  try {
+    response = await fetch('/api/projects', {
+      method: 'POST', signal, cache: 'no-store',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: input.path, slug: input.slug, name: input.name }),
+    });
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    throw new ApiError('无法连接本地 API，请确认服务已启动');
+  }
+  if (!response.ok) {
+    if (response.status === 409) throw new ApiError('项目或仓库已登记', 409);
+    if (response.status === 400) throw new ApiError('仓库路径或登记信息无效', 400);
+    throw new ApiError(`API 请求失败：HTTP ${response.status}`, response.status);
+  }
+  let payload: unknown;
+  try { payload = await response.json(); }
+  catch { throw new ApiError('API 返回无效 JSON', response.status); }
+  return decodeProjectList({ projects: [payload] })[0]!;
+}

@@ -1,5 +1,16 @@
 # Hulane OpenCode — 会话交接与逐步提交记录
 
+### WB-004 checkpoint — 2026-11-21: unborn HEAD and staged-dirty regression
+
+- Task: add a focused real-Git regression for a newly initialized repository before its first commit, including staged and untracked dirty states.
+- Branch: `feat/WB-004-registration-client-20261120`; parent remote SHA: `2891e96e774f99e276bb860c20181f8025305121`; new remote SHA is authoritative at the branch ref (avoid self-referential hash).
+- Files: `workbench/apps/api/test/repository-status.spec.ts`, `docs/SESSION_HANDOFF.md`.
+- Acceptance: `readRepositoryStatus` returns `headSha: null`, the real symbolic branch and `dirty: false` on an empty unborn repository; staged and untracked files both report dirty without fabricating a HEAD.
+- Validation: static source review only; local Node/Git test execution and new commit CI are **not yet verified**. Previous commit `2891e96e774f99e276bb860c20181f8025305121` Workbench CI [44882886809](https://github.com/hutong236/hulane-opencode/actions/runs/44882886809) and Hulane CI [44882886767](https://github.com/hutong236/hulane-opencode/actions/runs/44882886767) passed; do not apply those results to this change.
+- Concurrency: GitHub Actions REST reported zero in-progress and zero queued workflow runs immediately before this checkpoint.
+- Next: inspect both CI workflows on the new remote SHA; fix any failure first, otherwise expose real persisted project Git health in Web UI and cover stale/missing repository errors. Keep Issues #8 and #3 open; no Gate bypass or production merge.
+
+
 > **本文件是 Web/ChatGPT 会话结束后的恢复入口。每完成一个可验收的小步骤，必须立刻 Commit + Push，并在本文件记录新的进展（优先与该步骤同一提交）。**
 >
 > 续作时始终先读取 GitHub 远程分支当前状态，不依赖上一次会话的聊天记录。工作约定详见仓库根目录 [AGENTS.md](../AGENTS.md)。
@@ -566,3 +577,57 @@ npm test
 - Validation: source reviewed against actual `ProjectList.tsx`; local Playwright and real OpenCode CLI **not run**. New commit CI pending and must be checked before claiming pass.
 - Risk: stacked PRs need review; this does not satisfy project registration/Git health UI or production Issue #3.
 - Next: inspect exact SHA Workbench/Hulane CI; fix any failure, then implement project registration and Git health UI controls.
+
+### WB-004 — Safe browser registration API client (2026-11-20)
+- Branch: `feat/WB-004-registration-client-20261120`, stacked on PR #51 SHA `3afefaa50781ed3d2aa5da7f9c84c0ea5381d2bf`.
+- Changed: `workbench/apps/web/src/api/client.ts`, `workbench/apps/web/test/project-registration.spec.ts`.
+- Acceptance: local-only POST /api/projects with validated input and persisted response; duplicate/unsafe-path errors mapped without leaking server text; abort preserved. Server remains authoritative for realpath and Git root checks.
+- Validation: new Node test cases added for success, invalid input, HTTP 400/409, malformed response and abort. No local npm or real OpenCode CLI execution in this API session; exact new commit's CI must be checked after push.
+- Risk: registration UI and live Git health status are not yet wired. Issue #8 and production Issue #3 remain open.
+- Next atomic task: add project registration form to ProjectList, show safe validation failures and refresh persisted list, with browser E2E.
+
+### WB-004 checkpoint — 2026-11-20: repair incomplete Git tree
+
+- Step: Restore the complete inherited repository tree on PR #52; the prior commit `b7fdcfbabfcaa6f474128cc875de5ed7186eb50c` accidentally used a root tree containing only 10 entries, omitting AGENTS.md, package manifests and most source files.
+- Branch: `feat/WB-004-registration-client-20261120`; parent: `b7fdcfbabfcaa6f474128cc875de5ed7186eb50c`.
+- Files: repository tree restored from parent PR #51 tree `78687d196cd8ceaf7ded0929a6e1f55affcf6e19`, preserving PR #52 registration client and test blobs; this handoff entry records the correction.
+- Validation: GitHub Git Trees API confirmed PR #51 base tree contains 274 entries and defective PR #52 tree only 10; restored tree must be verified remotely after push. Local npm/typecheck/Playwright not run. CI pending; real OpenCode CLI not run.
+- Risk: Do not treat the prior commit as a buildable full checkout. Production Gate remains unverified.
+- Next: Inspect PR #52 Workbench/Hulane CI and fix any failures; then implement registration form and project list refresh.
+
+
+### WB-004 — Web registration form and list refresh (2026-11-20)
+- Branch: `feat/WB-004-registration-client-20261120`; parent remote SHA `e68213e47ed133c200f47868ee0723a76d214a0f` (new HEAD is authoritative after push).
+- Files: `workbench/apps/web/src/components/ProjectList.tsx`, `docs/SESSION_HANDOFF.md`.
+- Acceptance: project form accepts absolute path, slug and name; calls existing same-origin `registerProject`; prevents duplicate in-flight submit; shows sanitized 400/409 errors; resets form and reloads persisted list on success; aborts pending request on unmount.
+- Validation: source review only in GitHub API environment; npm, TypeScript, Playwright and real OpenCode CLI not executed. Prior Workbench CI #44788480278 passed, Hulane CI #44788480158 failed due to cancelled macOS smoke job; new commit CI must be checked separately.
+- Concurrency: repository Actions queue and in-progress runs were both zero before write (GitHub REST repository Actions collection).
+- Risk: browser E2E for registration and real Git health status still missing; Issue #8 and production Issue #3 remain open.
+- Next: inspect exact new SHA CI; fix failures first, then add Playwright registration/error/list refresh coverage and Git health status.
+
+
+### WB-004 — Browser registration regression checkpoint (2026-11-20)
+- Branch: `feat/WB-004-registration-client-20261120`; parent: `f9e08caf67c7c7be31a7a9a3001e443a2d408bc0`; authoritative new SHA is remote branch HEAD.
+- Files: `workbench/e2e/project-registration.spec.ts`, this handoff.
+- Acceptance: Playwright verifies local POST payload and persisted list refresh, duplicate 409 redaction, and relative path rejection without POST.
+- Evidence: prior commit `f9e08caf67c7c7be31a7a9a3001e443a2d408bc0` Workbench CI https://github.com/hutong236/hulane-opencode/actions/runs/44826052995 and Hulane CI https://github.com/hutong236/hulane-opencode/actions/runs/44826053009 both completed success. New tests not locally executed; new SHA CI pending. Real OpenCode CLI not exercised.
+- Concurrency: repository Actions in_progress=0, queued=0 immediately before write; target HEAD matched parent.
+- Remaining: verify new Playwright Node 20/22 CI; then implement real Git health status and negative cases. Issue #8 and production #3 remain open; no production merge.
+
+### WB-004 — Invalid Git root browser retry regression (2026-11-20)
+- Branch: `feat/WB-004-registration-client-20261120`; parent verified remote SHA `3f628a9ecfd27239198e9689f834ac83984a0edd`.
+- Files: `workbench/e2e/project-registration.spec.ts`, `docs/SESSION_HANDOFF.md`.
+- Acceptance: browser regression checks API 400 for a non-Git absolute root is rendered as sanitized feedback without leaking server text; corrected path retries successfully and refreshes the registered list.
+- Validation: previous SHA Workbench CI https://github.com/hutong236/hulane-opencode/actions/runs/44833562838 and Hulane CI https://github.com/hutong236/hulane-opencode/actions/runs/44833562856 both completed success. New Playwright test NOT executed locally; new SHA CI pending; real OpenCode CLI NOT exercised.
+- Concurrency: repository Actions queued=0, in_progress=0 before this change; branch SHA verified. No production operations.
+- Risk: mocked HTTP responses are not a real three-repository integration acceptance; Git health UI still missing. Issues #8 and #3 remain open.
+- Next: inspect new SHA CI, fix failures first, then wire real HEAD/branch/dirty status into the Web project view with browser regression.
+
+### WB-004 — Align HTTP 400 browser assertion with sanitized client feedback (2026-11-21)
+- Branch: `feat/WB-004-registration-client-20261120`; verified parent remote SHA `7bf996e3eab07d8295bf4167663dda0bc5c7a8f8`.
+- Files: `workbench/e2e/project-registration.spec.ts`, `docs/SESSION_HANDOFF.md`.
+- Acceptance: invalid Git root HTTP 400 displays the actual sanitized client message `仓库路径或登记信息无效`, does not reveal `PRIVATE_SERVER_PATH`, and corrected retry still refreshes the project list. Only the mismatched assertion changed; existing retry and redaction checks retained.
+- Evidence: prior Workbench CI https://github.com/hutong236/hulane-opencode/actions/runs/44847096365 failed on old expected wording; prior Hulane CI https://github.com/hutong236/hulane-opencode/actions/runs/44847096379 succeeded. Source-level assertion replacement verified; no local npm/Playwright or real OpenCode CLI execution. New SHA CI must be checked after push.
+- Concurrency: repository Actions in_progress=0 and queued=0 from GitHub REST before write; remote target HEAD verified.
+- Risk: mock-based Playwright is not real local Git root or production Gate acceptance. Issues #8 and #3 remain open.
+- Next: verify exact new SHA Workbench/Hulane CI; if green, implement actual Git HEAD/branch/dirty health status in Web project list with tests.

@@ -45,3 +45,29 @@ test('rejects nested paths rather than silently reading a parent repository', as
     await rm(temp, { recursive: true, force: true });
   }
 });
+
+test('unborn Git repository reports null HEAD and detects staged changes', async () => {
+  const temp = await mkdtemp(join(tmpdir(), 'wb-repo-status-unborn-'));
+  try {
+    const repo = join(temp, 'repo');
+    await mkdir(repo);
+    const git = (...args: string[]) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim();
+    git('init', '-q');
+    const branch = git('symbolic-ref', '--short', 'HEAD');
+    const unborn = await readRepositoryStatus(repo);
+    assert.deepEqual(unborn, { repoRoot: repo, headSha: null, branch, dirty: false });
+
+    const { writeFile } = await import('node:fs/promises');
+    await writeFile(join(repo, 'staged.txt'), 'staged content');
+    git('add', '--', 'staged.txt');
+    const staged = await readRepositoryStatus(repo);
+    assert.equal(staged.headSha, null);
+    assert.equal(staged.branch, branch);
+    assert.equal(staged.dirty, true);
+
+    git('reset', '--', 'staged.txt');
+    assert.equal((await readRepositoryStatus(repo)).dirty, true, 'untracked file remains dirty');
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
