@@ -57,7 +57,7 @@ export function ciVerdict(runs, jobsOf=()=>undefined) {
   return cancelled ? 'cancelled' : 'passed';
 }
 
-export function selectWork(issues, prs, runs) {
+export function selectWork(issues, prs, runs, merged = []) {
   const tasks = new Map();
   for (const issue of issues) {
     if (issue.pull_request) continue;
@@ -94,6 +94,10 @@ export function selectWork(issues, prs, runs) {
       if (verdict !== 'failed') { pending.push(`${code}: ${waiting[verdict]}`); continue; }
       return { mode:'repair',id,code,issue,branch:pr.head.ref,pr:pr.number,reason:`Failed CI on PR #${pr.number}` };
     }
+    // The change already landed in a merged pull request. The task waits for its acceptance: implementing it again
+    // would duplicate work that a person has already reviewed and merged.
+    const delivered = merged.find(pr => pr.merged_at && (pr.title?.includes(code) || pr.body?.includes(code)));
+    if (delivered) { pending.push(`${code}: delivered in PR #${delivered.number}, awaiting acceptance`); continue; }
     return { mode:'new',id,code,issue,branch:`feat/${code}-autodev`,pr:0,reason:'Dependencies closed' };
   }
   return { mode:'wait',reason:pending.slice(0,8).join('; ')||'All 28 issues closed' };
@@ -139,11 +143,13 @@ function summary(msg) {
 }
 async function select() {
   if (REPO!=='hutong236/hulane-opencode') throw new Error('Wrong repository');
-  const [issues,prs,runs]=await Promise.all([
+  const [issues,pulls,runs]=await Promise.all([
     pages(`/repos/${REPO}/issues?state=all`),
-    pages(`/repos/${REPO}/pulls?state=open`),
+    pages(`/repos/${REPO}/pulls?state=all`),
     pages(`/repos/${REPO}/actions/runs?per_page=100`),
   ]);
+  const prs=pulls.filter(pr=>pr.state==='open');
+  const merged=pulls.filter(pr=>pr.merged_at);
   // The run list carries no jobs. They are fetched for the runs the verdicts are based on: the latest run of each
   // workflow at the head of each open pull request from a task branch.
   const candidates=[];
@@ -160,7 +166,7 @@ async function select() {
     const {jobs}=await gh(`/repos/${REPO}/actions/runs/${run.id}/jobs?per_page=100`);
     run.jobs=jobs.map(({name,status,conclusion})=>({name,status,conclusion}));
   }));
-  const choice=selectWork(issues,prs,runs);
+  const choice=selectWork(issues,prs,runs,merged);
   output('action',choice.mode);
   if (choice.mode==='wait') { summary(`No safe task selected: ${choice.reason}`); return; }
   writeFileSync(`${process.env.RUNNER_TEMP||'/tmp'}/workbench-autodev-issue.md`,

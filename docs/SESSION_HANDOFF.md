@@ -1,3 +1,12 @@
+### Workbench autonomous development — 2026-11-25: a delivered task waits for acceptance
+
+- Task: after a delivery pull request is merged, its task issue stays open until a person accepts it — and the selector then treated the task as new work and implemented it again. Live right after the project catalog change landed: the selection answered "Selected WB-004: new on feat/WB-004-autodev" on the delivered task, and the next scheduled run would have burned a model pass on it and opened a redundant Draft pull request.
+- Branch: `fix/autodev-delivered-task-waits`, from `main` `7ca554d6a65b329d1dda670c589decb9dd2b49ab`.
+- Fix: a merged pull request whose title or body carries the task code marks the task as delivered; the selector then answers "delivered in PR #N, awaiting acceptance" instead of selecting it. The code in the title or body counts, exactly as it does when open pull requests are matched to a task. A pull request closed without merging delivers nothing. An open pull request for the task still decides on its own. The direction of the error is deliberate: waiting for a person is safe, implementing delivered work again is not.
+- Validation: the selector against the live API answers "WB-004: delivered in PR #65, awaiting acceptance"; root `npm test` passed 208/208 (two tests more than before); removing the delivered check turns both new tests red.
+- Note: the issues of delivered tasks stay open until a person accepts them, so the selector keeps waiting for those tasks. That is the intended behavior; acceptance is the human's call, and Issue #3 stays open as well.
+- Next: nothing pending. Issues #8 and #3 stay open; no merge, Gate bypass or production claim.
+
 ### WB-005 repair checkpoint — 2026-11-25: duplicate-key conflicts never depend on a readable snapshot
 
 - Task: repair the duplicate-creation path so a stored requirement key is always rejected as a conflict, even when that row has no readable version snapshot, and add the missing regressions for duplicate creation, letter-case variants and a second connection.
