@@ -12,3 +12,8 @@ export type {
 } from './requirements.js';
 export { ProjectRepository, PROJECT_TAG_LIMIT } from './projects.js';
 export type { Project, NewProject, ProjectTagKind, ProjectTags } from './projects.js';
+export { diffRequirementVersions, canonicalJson, diffSha256 } from './requirement-diff.js';
+export type {
+  DiffSnapshot, DiffOp, NeedsReviewReason, RequirementDiff, RequirementDiffChange, RequirementDiffSummary,
+  AddedChange, DeletedChange, ModifiedChange, NeedsReviewChange,
+} from './requirement-diff.js';
