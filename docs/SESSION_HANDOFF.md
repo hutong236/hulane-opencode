@@ -1,3 +1,14 @@
+### WB-005 repair checkpoint — 2026-11-25: duplicate-key conflicts never depend on a readable snapshot
+
+- Task: repair the duplicate-creation path so a stored requirement key is always rejected as a conflict, even when that row has no readable version snapshot, and add the missing regressions for duplicate creation, letter-case variants and a second connection.
+- Branch: the autonomous repair branch for WB-005; the remote branch head is the authoritative SHA. No commit SHA is claimed here.
+- Files: `workbench/packages/database/src/requirements.ts`, `workbench/packages/database/test/requirements.spec.ts`, `workbench/apps/api/test/requirements.spec.ts`, `docs/SESSION_HANDOFF.md`. No production UI or client file changed.
+- Cause and change: `RequirementRepository.create` used the snapshot join inside `findByKey` to detect duplicates, so a stored key without a joined version reached the SQLite UNIQUE constraint and could surface as HTTP 500 instead of the intended conflict. It now reads the authoritative `requirements.requirement_key` column. A rejected create still appends no version, and the API continues to answer 409 without SQLite text.
+- New regressions: an orphaned requirement row (key present, `current_version` 0) is rejected with `RequirementConflictError` and adds no row or version; a second SQLite connection cannot create a duplicate and cannot overwrite the winner; the API rejects `REQ-012` and `req-012` after one create while the stored title, requirement count and version count stay unchanged.
+- Validation: **not run** in this connector-only repair session. Lint, typecheck, build, unit tests, Playwright and the reported failing CI could not be executed or read here, and the reported failure could not be reproduced by source inspection. Do not treat this checkpoint as CI evidence; read the exact remote SHA's Actions runs.
+- Known limits: the `/requirements` list/detail/history page, the Web API client, safe Markdown rendering and the XSS browser case are still missing. Only the forward transition path exists.
+- Next: add strict requirement decoders to `workbench/apps/web/src/api/client.ts`, then the `/requirements` list/create/edit/history page with text-only Markdown rendering and Playwright cases for XSS input, stale-revision retention and draft→reviewed→approved. Issues #9 and #3 stay open.
+
 ### WB-005 checkpoint — 2026-11-24: requirement repository, immutable snapshots and CAS API
 
 - Task: first bounded WB-005 slice — workbench-wide requirement persistence with draft→reviewed→approved transitions, revision compare-and-swap, append-only version snapshots and a read/history API. UI is deliberately not part of this step.

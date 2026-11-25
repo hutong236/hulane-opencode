@@ -267,3 +267,36 @@ test('requirement API validates IDs, duplicate keys and unsafe or oversized fiel
     rmSync(temp, { recursive: true, force: true });
   }
 });
+
+test('requirement API rejects duplicate keys in any letter case without replacing the stored version', async () => {
+  const temp = mkdtempSync(fixturePrefix('wb-requirement-duplicate-'));
+  const db = new WorkbenchDatabase({ dataDirectory: join(temp, 'data') });
+  const app = buildApp({ database: db });
+  try {
+    const created = await app.inject({
+      method: 'POST', url: '/api/requirements', payload: requirement('Original', { requirementKey: 'REQ-012' }),
+    });
+    assert.equal(created.statusCode, 201);
+    for (const requirementKey of ['REQ-012', 'req-012']) {
+      const duplicate = await app.inject({
+        method: 'POST', url: '/api/requirements',
+        payload: requirement('Replacement', { requirementKey, summary: 'Duplicate create' }),
+      });
+      assert.equal(duplicate.statusCode, 409);
+      assert.ok(!duplicate.body.includes('SQLITE'));
+    }
+    const list = (await app.inject({ method: 'GET', url: '/api/requirements' })).json();
+    assert.equal(list.requirements.length, 1);
+    assert.equal(list.requirements[0].requirement_key, 'REQ-012');
+    assert.equal(list.requirements[0].content.title, 'Original');
+    const history = (await app.inject({
+      method: 'GET', url: `/api/requirements/${created.json().id}/versions`,
+    })).json();
+    assert.equal(history.versions.length, 1);
+    assert.equal(history.versions[0].content.title, 'Original');
+  } finally {
+    await app.close();
+    db.close();
+    rmSync(temp, { recursive: true, force: true });
+  }
+});

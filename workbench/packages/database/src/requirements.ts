@@ -132,7 +132,7 @@ export class RequirementRepository {
     const id = randomUUID();
     const now = new Date().toISOString();
     return this.write(() => {
-      if (this.findByKey(requirementKey)) throw new RequirementConflictError('Requirement key already exists');
+      if (this.hasRequirementKey(requirementKey)) throw new RequirementConflictError('Requirement key already exists');
       this.db.prepare(`
         INSERT INTO requirements(id, requirement_key, title, status, current_version, revision, created_at, updated_at)
         VALUES (@id, @requirement_key, @title, 'draft', 1, 1, @created_at, @updated_at)
@@ -250,6 +250,11 @@ export class RequirementRepository {
 
   private findRow(id: string): RequirementRow | null {
     return (this.db.prepare(`${REQUIREMENT_SELECT} WHERE r.id = ?`).get(id) as RequirementRow | undefined) ?? null;
+  }
+
+  /** The key column stays authoritative even when a row has no readable version snapshot. */
+  private hasRequirementKey(requirementKey: string): boolean {
+    return this.db.prepare('SELECT 1 FROM requirements WHERE requirement_key = ?').get(requirementKey) !== undefined;
   }
 
   private versionRow(id: string, version: number): VersionRow | null {

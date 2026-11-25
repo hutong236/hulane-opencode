@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -196,4 +197,43 @@ test('requirement input validation and duplicate keys fail before writing partia
       x.database.requirements.findByKey('REQ-005')!.id,
     ).length, 1);
   } finally { x.dispose(); }
+});
+
+test('duplicate keys stay rejected when a requirement row has no readable snapshot', () => {
+  const x = fixture();
+  try {
+    const now = new Date().toISOString();
+    const orphan = randomUUID();
+    // A corrupted or partially migrated row has the key but no version for findByKey to join.
+    x.database.connection.prepare(`
+      INSERT INTO requirements(id, requirement_key, title, status, current_version, revision, created_at, updated_at)
+      VALUES (?, 'REQ-011', 'Orphaned row', 'draft', 0, 1, ?, ?)
+    `).run(orphan, now, now);
+    assert.equal(x.database.requirements.findByKey('REQ-011'), null);
+    assert.throws(() => x.database.requirements.create({
+      requirementKey: 'req-011', content: content('Duplicate'), actor: 'alice', summary: 'Create',
+    }), RequirementConflictError);
+    assert.equal(x.database.requirements.versions(orphan).length, 0);
+    assert.equal((x.database.connection.prepare('SELECT COUNT(*) AS n FROM requirements').get() as { n: number }).n, 1);
+    assert.equal((x.database.connection.prepare('SELECT COUNT(*) AS n FROM requirement_versions').get() as { n: number }).n, 0);
+  } finally { x.dispose(); }
+});
+
+test('a second connection cannot create a duplicate key or overwrite the winner', () => {
+  const x = fixture();
+  const second = new WorkbenchDatabase({ dataDirectory: x.dir, busyTimeoutMs: 50 });
+  try {
+    const created = x.database.requirements.create({
+      requirementKey: 'REQ-012', content: content('Winner'), actor: 'alice', summary: 'Create',
+    });
+    assert.throws(() => second.requirements.create({
+      requirementKey: 'req-012', content: content('Loser'), actor: 'bob', summary: 'Duplicate',
+    }), RequirementConflictError);
+    assert.equal(second.requirements.list().length, 1);
+    assert.equal(second.requirements.find(created.id)?.content.title, 'Winner');
+    assert.equal(second.requirements.versions(created.id).length, 1);
+  } finally {
+    second.close();
+    x.dispose();
+  }
 });
