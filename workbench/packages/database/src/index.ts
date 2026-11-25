@@ -17,3 +17,5 @@ export type {
   DiffSnapshot, DiffOp, NeedsReviewReason, RequirementDiff, RequirementDiffChange, RequirementDiffSummary,
   AddedChange, DeletedChange, ModifiedChange, NeedsReviewChange,
 } from './requirement-diff.js';
+export { RequirementDiffRepository } from './requirement-diffs.js';
+export type { RequirementDiffRecord, StoredRequirementDiff } from './requirement-diffs.js';
