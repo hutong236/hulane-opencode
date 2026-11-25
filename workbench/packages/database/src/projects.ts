@@ -10,6 +10,8 @@ export interface Project {
   revision: number;
   created_at: string;
   updated_at: string;
+  /** URL of the `origin` remote without any user name or password; null when the repository has none. */
+  remote_url: string | null;
 }
 
 export interface NewProject {
@@ -17,6 +19,7 @@ export interface NewProject {
   name: string;
   repoRoot: string;
   defaultBranch?: string;
+  remoteUrl?: string | null;
 }
 
 export class ProjectRepository {
@@ -29,11 +32,12 @@ export class ProjectRepository {
     const id = randomUUID();
     const now = new Date().toISOString();
     this.db.prepare(`
-      INSERT INTO projects(id,slug,name,repo_root,default_branch,created_at,updated_at)
-      VALUES (@id,@slug,@name,@repo_root,@default_branch,@created_at,@updated_at)
+      INSERT INTO projects(id,slug,name,repo_root,default_branch,remote_url,created_at,updated_at)
+      VALUES (@id,@slug,@name,@repo_root,@default_branch,@remote_url,@created_at,@updated_at)
     `).run({
       id, slug: input.slug, name: input.name.trim(), repo_root: input.repoRoot,
-      default_branch: input.defaultBranch || 'main', created_at: now, updated_at: now,
+      default_branch: input.defaultBranch || 'main', remote_url: input.remoteUrl ?? null,
+      created_at: now, updated_at: now,
     });
     return this.find(id)!;
   }

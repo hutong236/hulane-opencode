@@ -48,9 +48,25 @@ export interface RegisteredProject {
   name: string;
   repo_root: string;
   default_branch: string;
+  /** The `origin` URL without any user name or password; null when the repository has none. */
+  remote_url: string | null;
   revision: number;
   created_at: string;
   updated_at: string;
+}
+
+/** The API strips credentials before storing a remote. Never show them either, should one slip through. */
+function withoutCredentials(url: string): string | null {
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) return url;
+  try {
+    const parsed = new URL(url);
+    if (!parsed.username && !parsed.password) return url;
+    parsed.username = '';
+    parsed.password = '';
+    return parsed.href;
+  } catch {
+    return null;
+  }
 }
 
 export function decodeProjectList(value: unknown): RegisteredProject[] {
@@ -68,8 +84,16 @@ export function decodeProjectList(value: unknown): RegisteredProject[] {
         !(row.repo_root as string).startsWith('/') || ids.has(row.id as string)) {
       throw new ApiError('API 返回的数据结构不正确');
     }
+    // A remote is either null or a non-empty URL. Missing is not accepted: the field is part of the contract.
+    if (row.remote_url !== null &&
+        (typeof row.remote_url !== 'string' || !(row.remote_url as string).trim())) {
+      throw new ApiError('API 返回的数据结构不正确');
+    }
+    const remoteUrl = row.remote_url === null ? null : withoutCredentials(row.remote_url as string);
+    if (remoteUrl === null && row.remote_url !== null) throw new ApiError('API 返回的数据结构不正确');
     ids.add(row.id as string);
-    return Object.fromEntries([...fields.map(key => [key, row[key]]), ['revision', row.revision]]) as unknown as RegisteredProject;
+    const entries = [...fields.map(key => [key, row[key]]), ['remote_url', remoteUrl], ['revision', row.revision]];
+    return Object.fromEntries(entries) as unknown as RegisteredProject;
   });
 }
 

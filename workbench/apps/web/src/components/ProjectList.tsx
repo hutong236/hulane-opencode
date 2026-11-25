@@ -193,13 +193,26 @@ export function ProjectList() {
       {state.status === 'ready' && (state.projects.length === 0
         ? <Empty description="尚未登记项目" />
         : <Table rowKey="id" dataSource={state.projects} pagination={{ pageSize: 10 }}
+            // Fixed widths leave the rest of the row to the one column without a width: the repository.
+            tableLayout="fixed" scroll={{ x: 880 }}
             columns={[
-              { title: '名称', dataIndex: 'name', key: 'name' },
-              { title: '标识', dataIndex: 'slug', key: 'slug' },
-              { title: '默认分支', dataIndex: 'default_branch', key: 'default_branch' },
-              { title: '本地仓库', dataIndex: 'repo_root', key: 'repo_root', ellipsis: true },
-              { title: '实时 Git 状态', key: 'git-health', render: (_: unknown, item: RegisteredProject) => <ProjectHealth key={item.id} id={item.id} /> },
-              { title: '操作', key: 'actions', render: (_: unknown, item: RegisteredProject) => <Space size="small" wrap>
+              { title: '名称', dataIndex: 'name', key: 'name', width: 140, ellipsis: true },
+              { title: '标识', dataIndex: 'slug', key: 'slug', width: 130, ellipsis: true },
+              { title: '默认分支', dataIndex: 'default_branch', key: 'default_branch', width: 100, ellipsis: true },
+              // The path and its origin are one fact shown on two lines; the whole value is in each line's tooltip.
+              { title: '仓库 / 远端', key: 'repository',
+                onCell: (item: RegisteredProject) => ({
+                  'aria-label': `仓库 ${item.repo_root}，远端 ${item.remote_url ?? '无'}`,
+                }),
+                render: (_: unknown, item: RegisteredProject) => <div style={{ width: 0, minWidth: '100%' }}>
+                  <Typography.Text ellipsis={{ tooltip: item.repo_root }}>{item.repo_root}</Typography.Text>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}
+                    ellipsis={{ tooltip: item.remote_url ?? false }}>
+                    {item.remote_url ? `origin: ${item.remote_url}` : '无远端'}
+                  </Typography.Text>
+                </div> },
+              { title: '实时 Git 状态', key: 'git-health', width: 220, render: (_: unknown, item: RegisteredProject) => <ProjectHealth key={item.id} id={item.id} /> },
+              { title: '操作', key: 'actions', width: 180, render: (_: unknown, item: RegisteredProject) => <Space size="small">
                   <Button size="small" disabled={busy} onClick={() => openRename(item)}>重命名</Button>
                   <ConfirmAction label="取消登记" size="small" danger loading={unregistering === item.id} disabled={busy}
                     title={`确认取消登记「${item.name}」？`} okText="确认取消登记" cancelText="保留登记"

@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 const project = {
   id: '12345678-1234-4234-8234-123456789abc',
   slug: 'cmdb', name: 'CMDB', repo_root: '/tmp/workbench-cmdb',
-  default_branch: 'main', revision: 0,
+  default_branch: 'main', remote_url: null, revision: 0,
   created_at: '2026-11-20T00:00:00Z', updated_at: '2026-11-20T00:00:00Z',
 };
 
@@ -26,7 +26,8 @@ test('project list shows loading then registered project metadata', async ({ pag
     release();
   }
   await expect(page.getByRole('cell', { name: 'CMDB', exact: true }).first()).toBeVisible();
-  await expect(page.getByRole('cell', { name: '/tmp/workbench-cmdb', exact: true }).first()).toBeVisible();
+  // The repository cell is named after both of its lines: the path and the remote, or the lack of one.
+  await expect(page.getByRole('cell', { name: '仓库 /tmp/workbench-cmdb，远端 无', exact: true }).first()).toBeVisible();
   await expect(page.getByText('尚未登记项目')).toHaveCount(0);
 });
 

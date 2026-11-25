@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import { WorkbenchDatabase } from '@hulane/workbench-database';
+import { readRepositoryMetadata } from './repository-metadata.js';
 import { validateRepositoryRoot } from './repository-root.js';
 import { readRepositoryStatus } from './repository-status.js';
 
@@ -22,7 +23,13 @@ export function buildApp(options: { database?: WorkbenchDatabase } = {}) {
     try {
       const projects = database().projects;
       if (projects.findByRoot(repoRoot)) return reply.code(409).send({ error: 'Repository already registered' });
-      return reply.code(201).send(projects.create({ slug: body.slug, name: body.name, repoRoot }));
+      // Read from Git once, at registration: where new work starts and which origin the repository tracks.
+      const metadata = await readRepositoryMetadata(repoRoot).catch(() => null);
+      if (!metadata) return reply.code(400).send({ error: 'Repository metadata is unreadable' });
+      return reply.code(201).send(projects.create({
+        slug: body.slug, name: body.name, repoRoot,
+        defaultBranch: metadata.defaultBranch, remoteUrl: metadata.remoteUrl,
+      }));
     } catch (error) {
       if (error instanceof Error && error.message.includes('UNIQUE constraint failed')) {
         return reply.code(409).send({ error: 'Project already registered' });

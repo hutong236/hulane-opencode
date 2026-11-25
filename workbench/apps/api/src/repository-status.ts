@@ -11,19 +11,25 @@ export interface RepositoryStatus {
   dirty: boolean;
 }
 
-/** Read-only status for a validated Git root. Never invoke a shell, inherited GIT_* overrides, or repository-configured fsmonitor/hooks. */
-export async function readRepositoryStatus(input: string): Promise<RepositoryStatus> {
-  const repoRoot = await validateRepositoryRoot(input);
+/**
+ * Read-only Git in a repository: never a shell, never inherited GIT_* overrides, never a repository-configured
+ * fsmonitor or hook. Rejects when Git exits with a non-zero status.
+ */
+export async function runGit(repoRoot: string, ...args: string[]): Promise<string> {
   const env = { ...process.env };
   for (const key of Object.keys(env)) {
     if (key.startsWith('GIT_')) delete env[key];
   }
-  const run = async (...args: string[]) => {
-    const { stdout } = await execFileAsync('git', ['-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', '-C', repoRoot, ...args], {
-      env, timeout: 5000, maxBuffer: 1024 * 1024,
-    });
-    return stdout.trim();
-  };
+  const { stdout } = await execFileAsync('git', ['-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', '-C', repoRoot, ...args], {
+    env, timeout: 5000, maxBuffer: 1024 * 1024,
+  });
+  return stdout.trim();
+}
+
+/** Read-only status for a validated Git root. */
+export async function readRepositoryStatus(input: string): Promise<RepositoryStatus> {
+  const repoRoot = await validateRepositoryRoot(input);
+  const run = (...args: string[]) => runGit(repoRoot, ...args);
   // Unborn repositories have no HEAD commit yet, but still have a branch.
   const branch = await run('symbolic-ref', '--quiet', '--short', 'HEAD').catch(() => null);
   const headSha = await run('rev-parse', '--verify', 'HEAD').catch(() => null);

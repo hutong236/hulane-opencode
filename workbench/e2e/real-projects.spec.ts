@@ -103,6 +103,11 @@ const world: {
   temp: string; dataDirectory: string; repositories: Record<Slug, string>;
   notARepository: string; symlinkAlias: string; api?: ApiProcess;
 } = { temp: '', dataDirectory: '', repositories: { cmdb: '', automation: '', monitoring: '' }, notARepository: '', symlinkAlias: '' };
+type Stored = { slug: string; name: string; revision: number; remote_url: string | null; default_branch: string };
+const stored = async (page: Page, slug: Slug): Promise<Stored | undefined> => {
+  const response = await page.request.get(`${world.api!.origin}/api/projects`);
+  return ((await response.json()).projects as Stored[]).find(project => project.slug === slug);
+};
 
 test.beforeAll(async () => {
   // macOS places its temp directory below the /var symlink, which the path guards reject.
@@ -110,6 +115,9 @@ test.beforeAll(async () => {
   world.dataDirectory = join(world.temp, 'data');
   mkdirSync(join(world.temp, 'repositories'));
   createRepository(world.repositories.cmdb = join(world.temp, 'repositories', 'cmdb'), 'clean');
+  // An origin without credentials, as a plain `git remote add` leaves it: no origin/HEAD is set by that.
+  execFileSync('git', ['init', '-q', '--bare', join(world.temp, 'cmdb-upstream.git')]);
+  git(world.repositories.cmdb, 'remote', 'add', 'origin', join(world.temp, 'cmdb-upstream.git'));
   createRepository(world.repositories.automation = join(world.temp, 'repositories', 'automation'), 'dirty');
   createRepository(world.repositories.monitoring = join(world.temp, 'repositories', 'monitoring'), 'unborn');
   mkdirSync(world.notARepository = join(world.temp, 'not-a-repository'));
@@ -182,6 +190,18 @@ test('three real repositories can be registered and the page shows what Git repo
   }
   expect(await row(page, 'MONITORING').innerText()).toContain(monitoring);
   expect(await listedSlugs(page)).toEqual(['cmdb', 'automation', 'monitoring']);
+  // Recorded once, at registration: the origin address, or that there is none, and where new work starts.
+  const cmdbRemote = join(world.temp, 'cmdb-upstream.git');
+  const repositoryCell = (name: string) => row(page, name).getByRole('cell', { name: /^仓库 / });
+  await expect(repositoryCell('CMDB')).toHaveAccessibleName(`仓库 ${world.repositories.cmdb}，远端 ${cmdbRemote}`);
+  await expect(repositoryCell('CMDB').getByText(`origin: ${cmdbRemote}`, { exact: true })).toBeVisible();
+  await expect(repositoryCell('AUTOMATION')).toHaveAccessibleName(`仓库 ${world.repositories.automation}，远端 无`);
+  await expect(repositoryCell('MONITORING')).toHaveAccessibleName(`仓库 ${world.repositories.monitoring}，远端 无`);
+  // Automation is checked out on a feature branch, but main exists: new work starts from main.
+  await expect(row(page, 'AUTOMATION').getByRole('cell', { name: 'main', exact: true })).toBeVisible();
+  expect(await stored(page, 'cmdb')).toMatchObject({ remote_url: cmdbRemote, default_branch: 'main' });
+  expect(await stored(page, 'automation')).toMatchObject({ remote_url: null, default_branch: 'main' });
+  expect(await stored(page, 'monitoring')).toMatchObject({ remote_url: null, default_branch: 'main' });
 });
 
 test('invalid, duplicate and symlinked registrations are rejected with a reason and add nothing', async ({ page }) => {

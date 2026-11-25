@@ -4,7 +4,7 @@ import { ApiError, registerProject } from '../src/api/client.js';
 
 const project = {
   id: '12345678-1234-4234-8234-123456789abc', slug: 'cmdb', name: 'CMDB',
-  repo_root: '/tmp/cmdb', default_branch: 'main', revision: 0,
+  repo_root: '/tmp/cmdb', default_branch: 'main', remote_url: null, revision: 0,
   created_at: '2026-11-20T00:00:00Z', updated_at: '2026-11-20T00:00:00Z',
 };
 

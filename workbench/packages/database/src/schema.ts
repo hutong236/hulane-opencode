@@ -149,6 +149,14 @@ CREATE INDEX ix_events_run_seq ON execution_events(run_id, seq);
 CREATE INDEX ix_approvals_run ON approvals(run_id, created_at);
 `,
   },
+  {
+    version: 2,
+    name: 'project_remote_url',
+    // NULL when the repository has no origin. Credentials are removed before a URL reaches this column.
+    sql: `
+ALTER TABLE projects ADD COLUMN remote_url TEXT;
+`,
+  },
 ] as const;
 
 export const EXPECTED_TABLES = [
