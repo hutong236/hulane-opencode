@@ -1,6 +1,8 @@
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync,
+} from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -30,6 +32,17 @@ function snapshot(directory: string, prefix = ''): Record<string, string> {
     const path = join(directory, name);
     if (lstatSync(path).isDirectory()) Object.assign(entries, snapshot(path, `${prefix}${name}/`));
     else entries[prefix + name] = createHash('sha256').update(readFileSync(path)).digest('hex');
+  }
+  return entries;
+}
+
+/** Permission bits of every entry under a directory, by the same keys as `snapshot`. */
+function permissionsOf(directory: string, prefix = ''): Record<string, number> {
+  const entries: Record<string, number> = {};
+  for (const name of readdirSync(directory).sort()) {
+    const path = join(directory, name);
+    if (lstatSync(path).isDirectory()) Object.assign(entries, permissionsOf(path, `${prefix}${name}/`));
+    entries[prefix + name] = lstatSync(path).mode & 0o777;
   }
   return entries;
 }
@@ -103,6 +116,11 @@ const world: {
   temp: string; dataDirectory: string; repositories: Record<Slug, string>;
   notARepository: string; symlinkAlias: string; api?: ApiProcess;
 } = { temp: '', dataDirectory: '', repositories: { cmdb: '', automation: '', monitoring: '' }, notARepository: '', symlinkAlias: '' };
+type Stored = { slug: string; name: string; revision: number; remote_url: string | null; default_branch: string };
+const stored = async (page: Page, slug: Slug): Promise<Stored | undefined> => {
+  const response = await page.request.get(`${world.api!.origin}/api/projects`);
+  return ((await response.json()).projects as Stored[]).find(project => project.slug === slug);
+};
 
 test.beforeAll(async () => {
   // macOS places its temp directory below the /var symlink, which the path guards reject.
@@ -110,6 +128,9 @@ test.beforeAll(async () => {
   world.dataDirectory = join(world.temp, 'data');
   mkdirSync(join(world.temp, 'repositories'));
   createRepository(world.repositories.cmdb = join(world.temp, 'repositories', 'cmdb'), 'clean');
+  // An origin without credentials, as a plain `git remote add` leaves it: no origin/HEAD is set by that.
+  execFileSync('git', ['init', '-q', '--bare', join(world.temp, 'cmdb-upstream.git')]);
+  git(world.repositories.cmdb, 'remote', 'add', 'origin', join(world.temp, 'cmdb-upstream.git'));
   createRepository(world.repositories.automation = join(world.temp, 'repositories', 'automation'), 'dirty');
   createRepository(world.repositories.monitoring = join(world.temp, 'repositories', 'monitoring'), 'unborn');
   mkdirSync(world.notARepository = join(world.temp, 'not-a-repository'));
@@ -182,6 +203,18 @@ test('three real repositories can be registered and the page shows what Git repo
   }
   expect(await row(page, 'MONITORING').innerText()).toContain(monitoring);
   expect(await listedSlugs(page)).toEqual(['cmdb', 'automation', 'monitoring']);
+  // Recorded once, at registration: the origin address, or that there is none, and where new work starts.
+  const cmdbRemote = join(world.temp, 'cmdb-upstream.git');
+  const repositoryCell = (name: string) => row(page, name).getByRole('cell', { name: /^仓库 / });
+  await expect(repositoryCell('CMDB')).toHaveAccessibleName(`仓库 ${world.repositories.cmdb}，远端 ${cmdbRemote}`);
+  await expect(repositoryCell('CMDB').getByText(`origin: ${cmdbRemote}`, { exact: true })).toBeVisible();
+  await expect(repositoryCell('AUTOMATION')).toHaveAccessibleName(`仓库 ${world.repositories.automation}，远端 无`);
+  await expect(repositoryCell('MONITORING')).toHaveAccessibleName(`仓库 ${world.repositories.monitoring}，远端 无`);
+  // Automation is checked out on a feature branch, but main exists: new work starts from main.
+  await expect(row(page, 'AUTOMATION').getByRole('cell', { name: 'main', exact: true })).toBeVisible();
+  expect(await stored(page, 'cmdb')).toMatchObject({ remote_url: cmdbRemote, default_branch: 'main' });
+  expect(await stored(page, 'automation')).toMatchObject({ remote_url: null, default_branch: 'main' });
+  expect(await stored(page, 'monitoring')).toMatchObject({ remote_url: null, default_branch: 'main' });
 });
 
 test('invalid, duplicate and symlinked registrations are rejected with a reason and add nothing', async ({ page }) => {
@@ -193,8 +226,10 @@ test('invalid, duplicate and symlinked registrations are rejected with a reason 
     await expect(row(page, 'Must be rejected')).toHaveCount(0);
     await expect(registeredRows(page)).toHaveCount(3);
   };
-  await rejected(world.notARepository, 'plain-folder', '仓库路径或登记信息无效');
-  await rejected(world.symlinkAlias, 'cmdb-alias', '仓库路径或登记信息无效');
+  // Each refusal says what is wrong with the path, and never the path itself.
+  await rejected(world.notARepository, 'plain-folder', '该目录不是 Git 仓库的根目录');
+  await rejected(world.symlinkAlias, 'cmdb-alias', '路径中包含符号链接，请使用真实路径');
+  await rejected(join(world.temp, 'does-not-exist'), 'missing-folder', '目录不存在');
   await rejected(world.repositories.automation, 'automation-again', '项目或仓库已登记');
 
   // A relative path never leaves the browser: the form itself refuses it.
@@ -239,4 +274,82 @@ test('registrations survive an API restart and the unregistered files are still 
   await expect(row(page, 'AUTOMATION')).toHaveCount(0);
   expect(await listedSlugs(page)).toEqual(['cmdb', 'monitoring']);
   expect(existsSync(join(world.repositories.automation, '.git'))).toBe(true);
+});
+
+test('a project can be renamed and the new name survives a restart without touching the repository', async ({ page }) => {
+  await openProjects(page);
+  const cmdb = async () => {
+    const response = await page.request.get(`${world.api!.origin}/api/projects`);
+    const projects = (await response.json()).projects as { slug: string; name: string; revision: number }[];
+    return projects.find(project => project.slug === 'cmdb');
+  };
+  await expect(row(page, 'CMDB').getByText('工作区干净')).toBeVisible();
+  const headBefore = git(world.repositories.cmdb, 'rev-parse', 'HEAD');
+  const changesBefore = changes(world.repositories.cmdb);
+  expect((await cmdb())?.revision).toBe(1);
+
+  await row(page, 'CMDB').getByRole('button', { name: '重命名' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('textbox', { name: '项目名称' }).fill('CMDB Core');
+  await dialog.getByRole('button', { name: '保存名称' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(row(page, 'CMDB Core').getByText('工作区干净')).toBeVisible();
+  await expect(row(page, 'CMDB')).toHaveCount(0);
+  await expect(row(page, 'MONITORING').getByText('尚无提交')).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  expect(await cmdb()).toMatchObject({ name: 'CMDB Core', revision: 2 });
+  // A rename is a catalog change only: same commit, same working tree, same files.
+  expect(git(world.repositories.cmdb, 'rev-parse', 'HEAD')).toBe(headBefore);
+  expect(changes(world.repositories.cmdb)).toBe(changesBefore);
+
+  await world.api!.stop();
+  world.api = await startApi(dirname(test.info().config.configFile!), world.dataDirectory);
+  await openProjects(page);
+  await expect(row(page, 'CMDB Core').getByText('工作区干净')).toBeVisible();
+  expect(await cmdb()).toMatchObject({ name: 'CMDB Core', revision: 2 });
+  expect(await listedSlugs(page)).toEqual(['cmdb', 'monitoring']);
+});
+
+test('a repository nobody may write to can be registered and read, and unregistering leaves it as it was', async ({ page }) => {
+  test.skip(process.getuid?.() === 0, 'permission bits do not restrict root');
+  const readOnly = join(world.temp, 'repositories', 'read-only');
+  createRepository(readOnly, 'dirty');
+  const setPermissions = (directory: string, directoryMode: number, fileMode: number) => {
+    for (const name of readdirSync(directory)) {
+      const path = join(directory, name);
+      if (lstatSync(path).isDirectory()) setPermissions(path, directoryMode, fileMode);
+      else chmodSync(path, fileMode);
+    }
+    chmodSync(directory, directoryMode);
+  };
+  // Nobody may write anywhere in it, not even into its own Git metadata.
+  setPermissions(readOnly, 0o555, 0o444);
+  try {
+    const before = snapshot(readOnly);
+    const permissions = permissionsOf(readOnly);
+    expect([...new Set(Object.values(permissions))].sort()).toEqual([0o444, 0o555]);
+
+    await openProjects(page);
+    await register(page, readOnly, 'read-only', 'READ-ONLY');
+    const project = row(page, 'READ-ONLY');
+    await expect(project.getByText('有未提交修改')).toBeVisible();
+    await expect(project.getByText('feature/automation', { exact: true }).last()).toBeVisible();
+    expect(await listedSlugs(page)).toEqual(['cmdb', 'monitoring', 'read-only']);
+    // Registering and reading never wrote into it: same bytes, same permissions, still read-only.
+    expect(snapshot(readOnly)).toEqual(before);
+    expect(permissionsOf(readOnly)).toEqual(permissions);
+
+    await row(page, 'READ-ONLY').getByRole('button', { name: '取消登记' }).click();
+    await page.locator('.ant-popconfirm').filter({ visible: true }).locator('.ant-popconfirm-buttons button').last().click();
+    await expect(row(page, 'READ-ONLY')).toHaveCount(0);
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    expect(await listedSlugs(page)).toEqual(['cmdb', 'monitoring']);
+    // Unregistering drops the registration only; every file, including uncommitted work, is still there.
+    expect(readFileSync(join(readOnly, 'untracked.txt'), 'utf8')).toBe('untracked, must survive\n');
+    expect(snapshot(readOnly)).toEqual(before);
+    expect(permissionsOf(readOnly)).toEqual(permissions);
+  } finally {
+    // The shared cleanup has to be able to remove the directory, whatever happened above.
+    setPermissions(readOnly, 0o755, 0o644);
+  }
 });

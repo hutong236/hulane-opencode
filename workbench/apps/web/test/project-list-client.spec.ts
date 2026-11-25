@@ -8,6 +8,7 @@ const valid = {
   name: 'Demo',
   repo_root: '/tmp/demo',
   default_branch: 'main',
+  remote_url: null,
   revision: 0,
   created_at: '2026-11-19T00:00:00.000Z',
   updated_at: '2026-11-19T00:00:00.000Z',
@@ -27,4 +28,29 @@ test('project list rejects malformed records and duplicate IDs', () => {
     { projects: [{ ...valid, name: '' }] },
     { projects: [valid, valid] },
   ]) assert.throws(() => decodeProjectList(value), ApiError);
+});
+
+test('a remote is null or a non-empty address, and a missing field is not accepted', () => {
+  const url = 'https://github.com/example/cmdb.git';
+  assert.deepEqual(decodeProjectList({ projects: [{ ...valid, remote_url: url }] }), [{ ...valid, remote_url: url }]);
+  assert.deepEqual(decodeProjectList({ projects: [valid] }), [valid]);
+  for (const remote_url of [undefined, '', '   ', 42, false, { url }, ['x']]) {
+    assert.throws(() => decodeProjectList({ projects: [{ ...valid, remote_url }] }), ApiError, String(remote_url));
+  }
+  const { remote_url, ...withoutField } = valid;
+  assert.throws(() => decodeProjectList({ projects: [withoutField] }), ApiError);
+});
+
+test('credentials in a remote address are never passed on to the page', () => {
+  // The API strips them before storing. Should one slip through, the list must not display it.
+  const leaking = 'https://x-access-token:ghp_SECRET@github.com/example/cmdb.git';
+  const decoded = JSON.stringify(decodeProjectList({ projects: [{ ...valid, remote_url: leaking }] }));
+  assert.ok(decoded.includes('https://github.com/example/cmdb.git'));
+  assert.equal(decoded.includes('ghp_SECRET'), false);
+  assert.equal(decoded.includes('x-access-token'), false);
+  // The scp-like form and a local path carry no password and stay as they are.
+  assert.deepEqual(decodeProjectList({ projects: [{ ...valid, remote_url: 'git@github.com:example/cmdb.git' }] }),
+    [{ ...valid, remote_url: 'git@github.com:example/cmdb.git' }]);
+  // An address with a scheme that cannot be parsed is refused rather than shown unchecked.
+  assert.throws(() => decodeProjectList({ projects: [{ ...valid, remote_url: 'https://[not-a-valid-host/x' }] }), ApiError);
 });

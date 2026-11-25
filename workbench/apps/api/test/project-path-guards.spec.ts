@@ -23,12 +23,12 @@ test('validation endpoint rejects nested and symlinked Git paths without disclos
     assert.equal(valid.statusCode, 200);
     assert.deepEqual(valid.json(), { repoRoot: root });
 
-    for (const path of [nested, alias, join(alias, 'nested')]) {
+    for (const [path, reason] of [[nested, 'not_git_root'], [alias, 'symlink'], [join(alias, 'nested'), 'symlink']] as const) {
       const response = await app.inject({
         method: 'POST', url: '/api/projects/validate', payload: { path },
       });
       assert.equal(response.statusCode, 400, `unsafe path should be rejected: ${path}`);
-      assert.deepEqual(response.json(), { error: 'Invalid Git repository root' });
+      assert.deepEqual(response.json(), { error: 'Invalid Git repository root', reason });
       assert.ok(!response.body.includes(temp), 'must not leak local filesystem paths');
     }
   } finally {

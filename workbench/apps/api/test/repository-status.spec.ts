@@ -40,7 +40,7 @@ test('rejects nested paths rather than silently reading a parent repository', as
     await mkdir(repo);
     execFileSync('git', ['init', '-q', repo]);
     await mkdir(join(repo, 'nested'));
-    await assert.rejects(readRepositoryStatus(join(repo, 'nested')), /Git worktree root/);
+    await assert.rejects(readRepositoryStatus(join(repo, 'nested')), /not_git_root/);
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
