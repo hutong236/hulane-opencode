@@ -54,3 +54,33 @@ test('registration rejects malformed success payload and preserves abort', async
       (e: unknown) => e instanceof DOMException && e.name === 'AbortError');
   } finally { globalThis.fetch = original; }
 });
+
+test('registration tells which kind of problem the API named, and never shows its raw text', async () => {
+  const original = globalThis.fetch;
+  const input = { path: '/private/secret/repo', slug: 'cmdb', name: 'CMDB' };
+  try {
+    for (const [reason, message] of [
+      ['missing', '目录不存在'],
+      ['not_directory', '该路径不是目录'],
+      ['symlink', '路径中包含符号链接，请使用真实路径'],
+      ['unreadable', '没有读取该目录的权限'],
+      ['not_git_root', '该目录不是 Git 仓库的根目录'],
+      ['not_absolute', '必须使用绝对路径'],
+    ]) {
+      globalThis.fetch = async () => new Response(JSON.stringify({ error: 'Invalid Git repository root', reason }), { status: 400 });
+      await assert.rejects(registerProject(input), (e: unknown) => e instanceof ApiError && e.status === 400 && e.message === message);
+    }
+    // A reason the page does not know, a body that is not JSON, and a 400 for another cause all get the general message.
+    globalThis.fetch = async () => new Response(JSON.stringify({ error: 'Invalid project registration' }), { status: 400 });
+    await assert.rejects(registerProject(input), /仓库路径或登记信息无效/);
+    globalThis.fetch = async () => new Response(JSON.stringify({ error: 'x', reason: '/private/secret/repo' }), { status: 400 });
+    await assert.rejects(registerProject(input),
+      (e: unknown) => e instanceof ApiError && e.message === '仓库路径或登记信息无效');
+    globalThis.fetch = async () => new Response('PRIVATE /private/secret/repo', { status: 400 });
+    await assert.rejects(registerProject(input),
+      (e: unknown) => e instanceof ApiError && e.message === '仓库路径或登记信息无效');
+    // "constructor" is a key of every object: it must not be mistaken for a known reason.
+    globalThis.fetch = async () => new Response(JSON.stringify({ reason: 'constructor' }), { status: 400 });
+    await assert.rejects(registerProject(input), /仓库路径或登记信息无效/);
+  } finally { globalThis.fetch = original; }
+});

@@ -101,6 +101,26 @@ export function getProjects(signal?: AbortSignal): Promise<RegisteredProject[]> 
   return requestJson('/api/projects', decodeProjectList, signal);
 }
 
+/** What the API says is wrong with a path, in words. Anything it does not name gets the general message. */
+const REJECTIONS: Record<string, string> = {
+  not_absolute: '必须使用绝对路径',
+  missing: '目录不存在',
+  not_directory: '该路径不是目录',
+  symlink: '路径中包含符号链接，请使用真实路径',
+  unreadable: '没有读取该目录的权限',
+  not_git_root: '该目录不是 Git 仓库的根目录',
+};
+
+async function rejectionReason(response: Response): Promise<string> {
+  try {
+    const payload = (await response.json()) as { reason?: unknown } | null;
+    const reason = payload?.reason;
+    return typeof reason === 'string' && Object.hasOwn(REJECTIONS, reason) ? REJECTIONS[reason] : '仓库路径或登记信息无效';
+  } catch {
+    return '仓库路径或登记信息无效';
+  }
+}
+
 /** Register a local Git repository. Server-side realpath/Git validation remains authoritative. */
 export async function registerProject(input: { path: string; slug: string; name: string }, signal?: AbortSignal): Promise<RegisteredProject> {
   if (!input.path.startsWith('/') || !/^[a-z0-9][a-z0-9-]{1,63}$/.test(input.slug) || !input.name.trim()) {
@@ -119,7 +139,7 @@ export async function registerProject(input: { path: string; slug: string; name:
   }
   if (!response.ok) {
     if (response.status === 409) throw new ApiError('项目或仓库已登记', 409);
-    if (response.status === 400) throw new ApiError('仓库路径或登记信息无效', 400);
+    if (response.status === 400) throw new ApiError(await rejectionReason(response), 400);
     throw new ApiError(`API 请求失败：HTTP ${response.status}`, response.status);
   }
   let payload: unknown;

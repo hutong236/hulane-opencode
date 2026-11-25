@@ -1,8 +1,11 @@
 import Fastify from 'fastify';
 import { WorkbenchDatabase } from '@hulane/workbench-database';
 import { readRepositoryMetadata } from './repository-metadata.js';
-import { validateRepositoryRoot } from './repository-root.js';
+import { RepositoryRootError, validateRepositoryRoot } from './repository-root.js';
 import { readRepositoryStatus } from './repository-status.js';
+
+/** The reason names a kind of problem and is safe to show. The path itself is never echoed. */
+const reasonOf = (error: unknown) => error instanceof RepositoryRootError ? error.reason : 'not_git_root';
 
 /** Build an application without opening a socket, so tests can use inject(). */
 export function buildApp(options: { database?: WorkbenchDatabase } = {}) {
@@ -19,7 +22,7 @@ export function buildApp(options: { database?: WorkbenchDatabase } = {}) {
     }
     let repoRoot: string;
     try { repoRoot = await validateRepositoryRoot(body.path); }
-    catch { return reply.code(400).send({ error: 'Invalid Git repository root' }); }
+    catch (error) { return reply.code(400).send({ error: 'Invalid Git repository root', reason: reasonOf(error) }); }
     try {
       const projects = database().projects;
       if (projects.findByRoot(repoRoot)) return reply.code(409).send({ error: 'Repository already registered' });
@@ -100,8 +103,8 @@ export function buildApp(options: { database?: WorkbenchDatabase } = {}) {
     try {
       const repoRoot = await validateRepositoryRoot(request.body.path);
       return { repoRoot };
-    } catch {
-      return reply.code(400).send({ error: 'Invalid Git repository root' });
+    } catch (error) {
+      return reply.code(400).send({ error: 'Invalid Git repository root', reason: reasonOf(error) });
     }
   });
   // Status is read-only and always revalidates the supplied canonical Git root.

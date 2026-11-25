@@ -1,6 +1,8 @@
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync,
+} from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -30,6 +32,17 @@ function snapshot(directory: string, prefix = ''): Record<string, string> {
     const path = join(directory, name);
     if (lstatSync(path).isDirectory()) Object.assign(entries, snapshot(path, `${prefix}${name}/`));
     else entries[prefix + name] = createHash('sha256').update(readFileSync(path)).digest('hex');
+  }
+  return entries;
+}
+
+/** Permission bits of every entry under a directory, by the same keys as `snapshot`. */
+function permissionsOf(directory: string, prefix = ''): Record<string, number> {
+  const entries: Record<string, number> = {};
+  for (const name of readdirSync(directory).sort()) {
+    const path = join(directory, name);
+    if (lstatSync(path).isDirectory()) Object.assign(entries, permissionsOf(path, `${prefix}${name}/`));
+    entries[prefix + name] = lstatSync(path).mode & 0o777;
   }
   return entries;
 }
@@ -213,8 +226,10 @@ test('invalid, duplicate and symlinked registrations are rejected with a reason 
     await expect(row(page, 'Must be rejected')).toHaveCount(0);
     await expect(registeredRows(page)).toHaveCount(3);
   };
-  await rejected(world.notARepository, 'plain-folder', '仓库路径或登记信息无效');
-  await rejected(world.symlinkAlias, 'cmdb-alias', '仓库路径或登记信息无效');
+  // Each refusal says what is wrong with the path, and never the path itself.
+  await rejected(world.notARepository, 'plain-folder', '该目录不是 Git 仓库的根目录');
+  await rejected(world.symlinkAlias, 'cmdb-alias', '路径中包含符号链接，请使用真实路径');
+  await rejected(join(world.temp, 'does-not-exist'), 'missing-folder', '目录不存在');
   await rejected(world.repositories.automation, 'automation-again', '项目或仓库已登记');
 
   // A relative path never leaves the browser: the form itself refuses it.
@@ -293,4 +308,48 @@ test('a project can be renamed and the new name survives a restart without touch
   await expect(row(page, 'CMDB Core').getByText('工作区干净')).toBeVisible();
   expect(await cmdb()).toMatchObject({ name: 'CMDB Core', revision: 2 });
   expect(await listedSlugs(page)).toEqual(['cmdb', 'monitoring']);
+});
+
+test('a repository nobody may write to can be registered and read, and unregistering leaves it as it was', async ({ page }) => {
+  test.skip(process.getuid?.() === 0, 'permission bits do not restrict root');
+  const readOnly = join(world.temp, 'repositories', 'read-only');
+  createRepository(readOnly, 'dirty');
+  const setPermissions = (directory: string, directoryMode: number, fileMode: number) => {
+    for (const name of readdirSync(directory)) {
+      const path = join(directory, name);
+      if (lstatSync(path).isDirectory()) setPermissions(path, directoryMode, fileMode);
+      else chmodSync(path, fileMode);
+    }
+    chmodSync(directory, directoryMode);
+  };
+  // Nobody may write anywhere in it, not even into its own Git metadata.
+  setPermissions(readOnly, 0o555, 0o444);
+  try {
+    const before = snapshot(readOnly);
+    const permissions = permissionsOf(readOnly);
+    expect([...new Set(Object.values(permissions))].sort()).toEqual([0o444, 0o555]);
+
+    await openProjects(page);
+    await register(page, readOnly, 'read-only', 'READ-ONLY');
+    const project = row(page, 'READ-ONLY');
+    await expect(project.getByText('有未提交修改')).toBeVisible();
+    await expect(project.getByText('feature/automation', { exact: true }).last()).toBeVisible();
+    expect(await listedSlugs(page)).toEqual(['cmdb', 'monitoring', 'read-only']);
+    // Registering and reading never wrote into it: same bytes, same permissions, still read-only.
+    expect(snapshot(readOnly)).toEqual(before);
+    expect(permissionsOf(readOnly)).toEqual(permissions);
+
+    await row(page, 'READ-ONLY').getByRole('button', { name: '取消登记' }).click();
+    await page.locator('.ant-popconfirm').filter({ visible: true }).locator('.ant-popconfirm-buttons button').last().click();
+    await expect(row(page, 'READ-ONLY')).toHaveCount(0);
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    expect(await listedSlugs(page)).toEqual(['cmdb', 'monitoring']);
+    // Unregistering drops the registration only; every file, including uncommitted work, is still there.
+    expect(readFileSync(join(readOnly, 'untracked.txt'), 'utf8')).toBe('untracked, must survive\n');
+    expect(snapshot(readOnly)).toEqual(before);
+    expect(permissionsOf(readOnly)).toEqual(permissions);
+  } finally {
+    // The shared cleanup has to be able to remove the directory, whatever happened above.
+    setPermissions(readOnly, 0o755, 0o644);
+  }
 });
