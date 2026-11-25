@@ -1,7 +1,11 @@
 import Fastify from 'fastify';
 import { WorkbenchDatabase } from '@hulane/workbench-database';
-import { validateRepositoryRoot } from './repository-root.js';
+import { readRepositoryMetadata } from './repository-metadata.js';
+import { RepositoryRootError, validateRepositoryRoot } from './repository-root.js';
 import { readRepositoryStatus } from './repository-status.js';
+
+/** The reason names a kind of problem and is safe to show. The path itself is never echoed. */
+const reasonOf = (error: unknown) => error instanceof RepositoryRootError ? error.reason : 'not_git_root';
 
 /** Build an application without opening a socket, so tests can use inject(). */
 export function buildApp(options: { database?: WorkbenchDatabase } = {}) {
@@ -18,11 +22,17 @@ export function buildApp(options: { database?: WorkbenchDatabase } = {}) {
     }
     let repoRoot: string;
     try { repoRoot = await validateRepositoryRoot(body.path); }
-    catch { return reply.code(400).send({ error: 'Invalid Git repository root' }); }
+    catch (error) { return reply.code(400).send({ error: 'Invalid Git repository root', reason: reasonOf(error) }); }
     try {
       const projects = database().projects;
       if (projects.findByRoot(repoRoot)) return reply.code(409).send({ error: 'Repository already registered' });
-      return reply.code(201).send(projects.create({ slug: body.slug, name: body.name, repoRoot }));
+      // Read from Git once, at registration: where new work starts and which origin the repository tracks.
+      const metadata = await readRepositoryMetadata(repoRoot).catch(() => null);
+      if (!metadata) return reply.code(400).send({ error: 'Repository metadata is unreadable' });
+      return reply.code(201).send(projects.create({
+        slug: body.slug, name: body.name, repoRoot,
+        defaultBranch: metadata.defaultBranch, remoteUrl: metadata.remoteUrl,
+      }));
     } catch (error) {
       if (error instanceof Error && error.message.includes('UNIQUE constraint failed')) {
         return reply.code(409).send({ error: 'Project already registered' });
@@ -41,6 +51,25 @@ export function buildApp(options: { database?: WorkbenchDatabase } = {}) {
     const project = database().projects.find(id);
     if (!project) return reply.code(404).send({ error: 'Project not found' });
     return project;
+  });
+  // Rename the catalog entry only. The revision must be the one the caller saw, so two editors cannot overwrite each other.
+  app.patch<{ Params: { id: string }; Body: { name?: unknown; revision?: unknown } }>('/api/projects/:id', async (request, reply) => {
+    const id = request.params.id;
+    const body = request.body;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      return reply.code(400).send({ error: 'Invalid project ID' });
+    }
+    if (!body || typeof body.name !== 'string' || !body.name.trim() || body.name.trim().length > 120 ||
+        !Number.isSafeInteger(body.revision) || (body.revision as number) < 0) {
+      return reply.code(400).send({ error: 'Invalid project update' });
+    }
+    const projects = database().projects;
+    if (!projects.find(id)) return reply.code(404).send({ error: 'Project not found' });
+    // A stale revision means the project was renamed since the caller loaded it: never overwrite that change.
+    if (!projects.updateName(id, body.revision as number, body.name)) {
+      return reply.code(409).send({ error: 'Project changed since it was loaded' });
+    }
+    return projects.find(id);
   });
   // Resolve status only from a persisted project ID; clients cannot substitute an arbitrary path.
   app.get<{ Params: { id: string } }>('/api/projects/:id/status', async (request, reply) => {
@@ -74,8 +103,8 @@ export function buildApp(options: { database?: WorkbenchDatabase } = {}) {
     try {
       const repoRoot = await validateRepositoryRoot(request.body.path);
       return { repoRoot };
-    } catch {
-      return reply.code(400).send({ error: 'Invalid Git repository root' });
+    } catch (error) {
+      return reply.code(400).send({ error: 'Invalid Git repository root', reason: reasonOf(error) });
     }
   });
   // Status is read-only and always revalidates the supplied canonical Git root.
