@@ -229,3 +229,219 @@ export async function unregisterProject(id: string, signal?: AbortSignal): Promi
   if (!response.ok) throw new ApiError(`API 请求失败：HTTP ${response.status}`, response.status);
   if (response.status !== 204) throw new ApiError('API 返回意外的删除结果', response.status);
 }
+
+/* ------------------------------- Requirements ------------------------------ */
+
+export type RequirementStatus = 'draft' | 'reviewed' | 'approved' | 'archived';
+export type RequirementPriority = 'low' | 'medium' | 'high' | 'critical';
+export interface RequirementAcceptanceCriterion { id: string; text: string }
+export interface RequirementContent {
+  title: string;
+  background: string;
+  goal: string;
+  scope: string;
+  acceptanceCriteria: RequirementAcceptanceCriterion[];
+  priority: RequirementPriority;
+  risk: string;
+}
+export interface Requirement {
+  id: string;
+  requirement_key: string;
+  title: string;
+  status: RequirementStatus;
+  current_version: number;
+  revision: number;
+  created_at: string;
+  updated_at: string;
+  content: RequirementContent;
+  content_sha256: string;
+}
+export interface RequirementVersion {
+  id: string;
+  requirement_id: string;
+  version: number;
+  content: RequirementContent;
+  content_sha256: string;
+  actor: string;
+  summary: string;
+  created_at: string;
+}
+
+export const REQUIREMENT_STATUSES: readonly RequirementStatus[] = ['draft', 'reviewed', 'approved', 'archived'];
+export const REQUIREMENT_PRIORITIES: readonly RequirementPriority[] = ['low', 'medium', 'high', 'critical'];
+/** draft→reviewed→approved→archived, one way. The API refuses anything else. */
+export const ALLOWED_TRANSITIONS: Readonly<Record<RequirementStatus, readonly RequirementStatus[]>> = {
+  draft: ['reviewed'], reviewed: ['approved'], approved: ['archived'], archived: [],
+};
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const REQUIREMENT_KEY = /^REQ-[0-9]{3,6}$/;
+const SHA = /^[0-9a-f]{64}$/;
+
+function decodeContent(value: unknown): RequirementContent {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid content');
+  const row = value as Record<string, unknown>;
+  for (const field of ['title', 'background', 'goal', 'scope', 'risk'] as const) {
+    if (typeof row[field] !== 'string') throw new Error('Invalid content');
+  }
+  if ((row.title as string).trim().length === 0) throw new Error('Invalid content');
+  if (!Array.isArray(row.acceptanceCriteria) || row.acceptanceCriteria.length > 50) throw new Error('Invalid content');
+  const ids = new Set<string>();
+  const criteria = row.acceptanceCriteria.map((entry: unknown) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error('Invalid content');
+    const item = entry as Record<string, unknown>;
+    if (typeof item.id !== 'string' || !item.id || typeof item.text !== 'string' || !item.text.trim()) {
+      throw new Error('Invalid content');
+    }
+    if (ids.has(item.id)) throw new Error('Invalid content');
+    ids.add(item.id);
+    return { id: item.id, text: item.text };
+  });
+  if (!REQUIREMENT_PRIORITIES.includes(row.priority as RequirementPriority)) throw new Error('Invalid content');
+  return {
+    title: row.title as string, background: row.background as string, goal: row.goal as string,
+    scope: row.scope as string, acceptanceCriteria: criteria,
+    priority: row.priority as RequirementPriority, risk: row.risk as string,
+  };
+}
+
+/** The requirement contract is strict like the project one: never render unvalidated API data. */
+function decodeRequirement(value: unknown): Requirement {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid requirement');
+  const row = value as Record<string, unknown>;
+  if (typeof row.id !== 'string' || !UUID.test(row.id)) throw new Error('Invalid requirement');
+  if (typeof row.requirement_key !== 'string' || !REQUIREMENT_KEY.test(row.requirement_key)) throw new Error('Invalid requirement');
+  if (typeof row.title !== 'string' || !row.title.trim()) throw new Error('Invalid requirement');
+  if (!REQUIREMENT_STATUSES.includes(row.status as RequirementStatus)) throw new Error('Invalid requirement');
+  for (const field of ['created_at', 'updated_at'] as const) {
+    if (typeof row[field] !== 'string' || !(row[field] as string).trim()) throw new Error('Invalid requirement');
+  }
+  if (!Number.isSafeInteger(row.current_version) || (row.current_version as number) < 1) throw new Error('Invalid requirement');
+  if (!Number.isSafeInteger(row.revision) || (row.revision as number) < 1) throw new Error('Invalid requirement');
+  if (typeof row.content_sha256 !== 'string' || !SHA.test(row.content_sha256)) throw new Error('Invalid requirement');
+  return {
+    id: row.id as string, requirement_key: row.requirement_key as string, title: row.title as string,
+    status: row.status as RequirementStatus,
+    current_version: row.current_version as number, revision: row.revision as number,
+    created_at: row.created_at as string, updated_at: row.updated_at as string,
+    content: decodeContent(row.content), content_sha256: row.content_sha256 as string,
+  };
+}
+
+/** A snapshot is strict like the requirement itself; its content is read-only by contract. */
+function decodeVersion(value: unknown): RequirementVersion {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid version');
+  const row = value as Record<string, unknown>;
+  if (typeof row.id !== 'string' || !UUID.test(row.id)) throw new Error('Invalid version');
+  if (typeof row.requirement_id !== 'string' || !UUID.test(row.requirement_id)) throw new Error('Invalid version');
+  if (!Number.isSafeInteger(row.version) || (row.version as number) < 1) throw new Error('Invalid version');
+  if (typeof row.actor !== 'string' || !row.actor.trim()) throw new Error('Invalid version');
+  if (typeof row.summary !== 'string') throw new Error('Invalid version');
+  if (typeof row.created_at !== 'string' || !(row.created_at as string).trim()) throw new Error('Invalid version');
+  if (typeof row.content_sha256 !== 'string' || !SHA.test(row.content_sha256)) throw new Error('Invalid version');
+  return {
+    id: row.id, requirement_id: row.requirement_id, version: row.version as number,
+    content: decodeContent(row.content), content_sha256: row.content_sha256,
+    actor: row.actor, summary: row.summary, created_at: row.created_at,
+  };
+}
+
+export function decodeRequirementList(value: unknown): Requirement[] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ApiError('API 返回的数据结构不正确');
+  const data = value as Record<string, unknown>;
+  if (!Array.isArray(data.requirements)) throw new ApiError('API 返回的数据结构不正确');
+  const ids = new Set<string>();
+  return data.requirements.map((item: unknown) => {
+    const requirement = decodeRequirement(item);
+    if (ids.has(requirement.id)) throw new ApiError('API 返回的数据结构不正确');
+    ids.add(requirement.id);
+    return requirement;
+  });
+}
+
+async function writeRequirement(path: string, method: string, payload: unknown, signal?: AbortSignal): Promise<Requirement> {
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      method, signal, cache: 'no-store',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    throw new ApiError('无法连接本地 API，请确认服务已启动');
+  }
+  if (!response.ok) {
+    if (response.status === 409) throw new ApiError('需求已被他人修改或状态不允许该转换，请刷新后重试', 409);
+    if (response.status === 404) throw new ApiError('需求不存在', 404);
+    if (response.status === 400) throw new ApiError('需求输入无效或格式不正确', 400);
+    throw new ApiError(`API 请求失败：HTTP ${response.status}`, response.status);
+  }
+  try { return decodeRequirement(await response.json()); }
+  catch { throw new ApiError('API 返回的数据结构不正确', response.status); }
+}
+
+export interface RequirementInput {
+  requirementKey: string;
+  content: RequirementContent;
+  actor: string;
+  summary: string;
+}
+
+/** The API reads the content fields from the top level of the body, beside key, actor and summary. */
+const writeBody = (input: RequirementInput & { expectedRevision?: number }) => ({
+  ...input.content,
+  requirementKey: input.requirementKey,
+  actor: input.actor,
+  summary: input.summary,
+  ...(input.expectedRevision === undefined ? {} : { expectedRevision: input.expectedRevision }),
+});
+
+export async function createRequirement(input: RequirementInput, signal?: AbortSignal): Promise<Requirement> {
+  return writeRequirement('/api/requirements', 'POST', writeBody(input), signal);
+}
+
+export function getRequirements(signal?: AbortSignal): Promise<Requirement[]> {
+  return requestJson('/api/requirements', decodeRequirementList, signal);
+}
+
+export async function getRequirement(id: string, signal?: AbortSignal): Promise<Requirement> {
+  if (!UUID.test(id)) throw new ApiError('需求 ID 无效', 400);
+  return requestJson(`/api/requirements/${id}`, decodeRequirement, signal);
+}
+
+export async function updateRequirement(
+  id: string, input: RequirementInput & { expectedRevision: number }, signal?: AbortSignal,
+): Promise<Requirement> {
+  if (!UUID.test(id)) throw new ApiError('需求 ID 无效', 400);
+  return writeRequirement(`/api/requirements/${id}`, 'PUT', writeBody(input), signal);
+}
+
+export async function transitionRequirement(
+  id: string, input: { status: RequirementStatus; expectedRevision: number; actor: string; summary: string }, signal?: AbortSignal,
+): Promise<Requirement> {
+  if (!UUID.test(id)) throw new ApiError('需求 ID 无效', 400);
+  return writeRequirement(`/api/requirements/${id}/transitions`, 'POST', input, signal);
+}
+
+export async function restoreRequirement(
+  id: string, input: { version: number; expectedRevision: number; actor: string; summary: string }, signal?: AbortSignal,
+): Promise<Requirement> {
+  if (!UUID.test(id)) throw new ApiError('需求 ID 无效', 400);
+  return writeRequirement(`/api/requirements/${id}/restore`, 'POST', input, signal);
+}
+
+export async function getRequirementVersions(id: string, signal?: AbortSignal): Promise<RequirementVersion[]> {
+  if (!UUID.test(id)) throw new ApiError('需求 ID 无效', 400);
+  return requestJson(`/api/requirements/${id}/versions`, (value: unknown) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ApiError('API 返回的数据结构不正确');
+    const data = value as Record<string, unknown>;
+    if (!Array.isArray(data.versions)) throw new ApiError('API 返回的数据结构不正确');
+    return data.versions.map(decodeVersion);
+  }, signal);
+}
+
+export async function getRequirementVersion(id: string, version: number, signal?: AbortSignal): Promise<RequirementVersion> {
+  if (!UUID.test(id) || !Number.isSafeInteger(version) || version < 1) throw new ApiError('需求版本无效', 400);
+  return requestJson(`/api/requirements/${id}/versions/${version}`, decodeVersion, signal);
+}
