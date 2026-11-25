@@ -17,6 +17,7 @@ test('every shipped migration keeps its published checksum', () => {
   assert.deepEqual(BASE_MIGRATIONS.map(migration => [migration.version, migration.name, sha256(migration.sql)]), [
     [1, 'workbench_initial_schema', 'd6210700ab7384286754f5529cd7da5a69cd028180d185f13838dc404c4da3ad'],
     [2, 'project_remote_url', '58805dfe62ef81978f83a2ca49f562a6e4176d767ce7c0ea91ce6b34d29f44b6'],
+    [3, 'project_tags', '061eb74850dd0fc5663f9cc6d924fcdab4440de388161cc2741b2bdce056745d'],
   ]);
 });
 
