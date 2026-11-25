@@ -162,3 +162,44 @@ test('the rows of an endpoint are read from the shape the API really answers wit
   // An answer that is neither a list nor an object with rows is refused.
   await assert.rejects(() => pages('/repos/x/issues', async () => ({ message: 'Bad credentials' })), /Unexpected GitHub response/);
 });
+
+test('a task whose change has landed waits for acceptance instead of being implemented again', () => {
+  // After the delivery pull request is merged the task is done but its issue is still open until a person accepts
+  // it. Selecting it again would duplicate work that has already been reviewed and merged.
+  const items = make();
+  for (const item of items) item.state = 'closed';
+  items[3].state = 'open'; // WB-004
+  const landed = { number: 65, state: 'closed', merged_at: '2026-11-25T09:11:11Z', title: 'WB-004 remaining scope' };
+  const choice = selectWork(items, [], [], [landed]);
+  assert.equal(choice.mode, 'wait');
+  assert.match(choice.reason, /WB-004: delivered in PR #65, awaiting acceptance/);
+
+  // A pull request that was closed without merging delivers nothing: the task may be started.
+  const declined = { ...landed, merged_at: null };
+  assert.equal(selectWork(items, [], [], [declined]).mode, 'new');
+
+  // A merged pull request of another task does not stand in the way either.
+  const other = { ...landed, title: 'WB-005: something else' };
+  assert.equal(selectWork(items, [], [], [other]).mode, 'new');
+
+  // No merged pull request at all: unchanged behavior.
+  assert.equal(selectWork(items, [], []).mode, 'new');
+
+  // An open pull request for the task still decides on its own, before the delivery check.
+  const pr = { state: 'open', number: 65, title: 'WB-004: in progress', head: { ref: 'feat/WB-004-autodev', sha: 's1', repo: { full_name: 'hutong236/hulane-opencode' } } };
+  const busy = selectWork(items, [pr], [run(1, 'Workbench CI', 'pull_request', 'completed', 'success')], [landed]);
+  assert.equal(busy.mode, 'wait');
+  assert.match(busy.reason, /PR #65 awaiting review/);
+});
+
+test('a merged pull request that names the code anywhere counts as delivery of that task', () => {
+  const items = make();
+  for (const item of items) item.state = 'closed';
+  items[5].state = 'open'; // WB-006
+  // The code in the body counts, exactly as it does when open pull requests are matched to a task. The direction of
+  // the error is deliberate: waiting for a person is safe, implementing a delivered task again is not.
+  const delivered = { number: 71, state: 'closed', merged_at: '2026-11-25T10:00:00Z', title: 'WB-004: done', body: 'Refers to WB-006 as an example' };
+  const choice = selectWork(items, [], [], [delivered]);
+  assert.equal(choice.mode, 'wait');
+  assert.match(choice.reason, /WB-006: delivered in PR #71/);
+});
