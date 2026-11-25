@@ -7,15 +7,17 @@ The workflow file stopped inside its model step from its first commit (`8e8cfcc`
 ## What one run does
 
 1. Runs the selector and workflow tests, then the credential gate. Missing configuration reports **BLOCKED**; no provider call and no repository write follows.
-2. Selects one task: a red pull request first (repair), otherwise the first open Issue whose dependencies are closed (new). An Issue with an open pull request whose CI is running or green is left alone, and so is one whose only open pull request comes from a branch that is not a task branch.
-3. Starts the pinned OpenCode V2.2.7 CLI with a dedicated `autodev` agent. Its rules deny every tool, then allow reading and editing `workbench/*` and `docs/SESSION_HANDOFF.md`; `.env*` files are denied again after that. The step has the provider key only: no GitHub token, no shell, no network tool. The limits live on the agent because OpenCode applies agent rules after global ones and the last match wins; the built-in `build` agent starts with allow-everything.
+2. Selects one task: a pull request whose CI failed first (repair), otherwise the first open Issue whose dependencies are closed (new). Dependencies are read from every line of the Issue's dependency section. An Issue with an open pull request is left alone when that pull request's CI is running, green, cancelled or not there yet, and so is an Issue whose only open pull request comes from a branch that is not a task branch or that has more than one open pull request. The CI verdict looks at the latest run of each workflow and at every job in it: a job the runner cancelled before it started is not a failed check.
+3. Starts the pinned OpenCode V2.2.7 CLI with a dedicated `autodev` agent. Its rules deny every tool, then allow reading and editing `workbench/*` and `docs/WORKBENCH_AUTODEV_LOG.md`; `.env*` files are denied again after that. The step has the provider key only: no GitHub token, no shell, no network tool. The limits live on the agent because OpenCode applies agent rules after global ones and the last match wins; the built-in `build` agent starts with allow-everything.
 4. Verifies the change with `workbench-autodev.mjs verify`: at most 30 files, allowed paths only, no secret-like path or symlink, no deleted file, no change to an existing `test*`, `lint`, `typecheck` or `build` script, and no change to a tracked `tsconfig*.json`, `workbench/playwright.config.ts`, `workbench/scripts/lint.mjs` or `workbench/.gitignore`. A violation fails the run and nothing is published.
 5. Runs the checks with no credentials: root `npm ci`, `check:syntax`, `npm test`; Workbench `npm ci`, lint, typecheck, build, unit tests and Playwright with the Chrome preinstalled on the runner image. Every command streams into the job log. Any failure fails the run.
 6. Publishes only when every check passed and the run was scheduled or was dispatched with `publish=true`: one commit, a plain push to the task branch (rejected, never forced, when the branch moved), then a Draft pull request for a new task or a comment on the existing one for a repair. The workflow never marks a pull request ready, merges, closes an Issue or forces a push.
 
 A new task uses `feat/WB-NNN-autodev`. If that branch already exists on the remote, the run ID is appended instead of reusing it.
 
-Every run prepends a checkpoint to `docs/SESSION_HANDOFF.md`, the same place every hand-made branch does. `.gitattributes` gives that file the `union` merge driver, so two branches that both add an entry merge without a conflict; the entries keep their dates but not necessarily their order.
+Every run prepends a checkpoint to `docs/WORKBENCH_AUTODEV_LOG.md` and does not touch the hand-written `SESSION_HANDOFF.md`, so an autonomous pull request does not conflict with a hand-made one at the top of that file.
+
+`.gitattributes` gives both files the `union` merge driver. That helps only a merge made with Git itself: `git merge main` into a branch keeps the entries of both sides, with their dates but not necessarily in order. GitHub's pull request check ignores the driver and still reports a conflict, so a pull request that overlaps another change at the top of either file has to be updated locally first. The first run that published before the log file existed edits `SESSION_HANDOFF.md` instead, and so does a repair of its pull request.
 
 ## Manual run and dry run
 
@@ -28,7 +30,8 @@ With `publish=false` the model and the checks run and the change is written to t
 ## Evidence so far
 
 - 2026-11-24: two dry runs dispatched from the fix branch (`3d89fd51`, `bf75d25e`) with `publish=false`, [run 45441282096](https://github.com/hutong236/hulane-opencode/actions/runs/45441282096) and [run 45446363872](https://github.com/hutong236/hulane-opencode/actions/runs/45446363872). Both selected WB-005, completed the model step with `deepseek/deepseek-flash` (11 and 7 minutes), passed the change verification and every check on the runner, and published nothing. The second change covered 18 files; its edits to the existing database tests only followed the migration it added.
-- The publishing step had not run for real when this was written.
+- 2026-11-24, the first real run with publishing, [run 45450862344](https://github.com/hutong236/hulane-opencode/actions/runs/45450862344), dispatched on `main` `5ad8ef9a`: selected WB-005, model step 5 minutes, 10 files verified, every check passed, then pushed `feat/WB-005-autodev` and opened Draft pull request [#67](https://github.com/hutong236/hulane-opencode/pull/67). Its own CI passed on all 16 checks. #67 was created before the log file existed, so it edits `SESSION_HANDOFF.md`.
+- 2026-11-25, 01:09 UTC, the first scheduled run, [run 45523668638](https://github.com/hutong236/hulane-opencode/actions/runs/45523668638): it repaired #67 although its checks were green, because the selector then counted a push run whose macOS job the runner had cancelled. It added commit `3ba4f490` to #67. Two selector defects were found with it and are fixed here: a cancelled job counted as a failed check, and only the first line of a dependency section was read, which made WB-012 look ready while WB-010 is open.
 
 ## GitHub owner setup
 
@@ -42,7 +45,7 @@ Until configured, the run reports **BLOCKED** and makes no model call or GitHub 
 
 ## Safety, caveats and handoff
 
-- The model step receives no GitHub token. Its OpenCode permissions deny shell and allow edits only in `workbench/` and `docs/SESSION_HANDOFF.md`; the change is verified again before anything is published.
+- The model step receives no GitHub token. Its OpenCode permissions deny shell and allow edits only in `workbench/` and `docs/WORKBENCH_AUTODEV_LOG.md`; the change is verified again before anything is published.
 - The model does **not** run tests. Checks run in a separate step with no provider or GitHub write secrets; their output is in the job log, and a failing check fails the run instead of leaving it green.
 - The publishing token is provided only in the final push/PR step. The workflow is serialized across scheduled runs and disallows modifying Hulane core, CI workflows and privileged release paths.
 - Nobody reviews a change before it becomes a Draft pull request. Read the diff in the job log and the pull request before merging.

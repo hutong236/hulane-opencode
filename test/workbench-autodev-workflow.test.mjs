@@ -92,10 +92,12 @@ test("the model agent can only read and edit the allowed paths", () => {
     { action: "glob", resource: "*", effect: "allow" },
     { action: "grep", resource: "*", effect: "allow" },
     { action: "edit", resource: "workbench/*", effect: "allow" },
-    { action: "edit", resource: "docs/SESSION_HANDOFF.md", effect: "allow" },
+    { action: "edit", resource: "docs/WORKBENCH_AUTODEV_LOG.md", effect: "allow" },
   ]);
   assert.match(block, /export OPENCODE_CONFIG="\$RUNNER_TEMP\/wb-agent\.json"/);
   assert.match(block, /--agent autodev/);
+  // The hand-written handoff is the one file every hand-made branch edits at the same place.
+  assert.ok(!block.includes("SESSION_HANDOFF.md"), "the model must not be pointed at the hand-written handoff");
   assert.match(block, /--standalone/);
   // --auto would approve every permission that is not explicitly denied.
   assert.ok(!block.includes("--auto"));
@@ -127,4 +129,5 @@ test("the handoff merges with the union driver, so concurrent checkpoints never 
   // Every autonomous run prepends a checkpoint to the same place as every hand-made branch.
   const attributes = readFileSync(path.join(root, ".gitattributes"), "utf8");
   assert.match(attributes, /^docs\/SESSION_HANDOFF\.md merge=union$/m);
+  assert.match(attributes, /^docs\/WORKBENCH_AUTODEV_LOG\.md merge=union$/m);
 });

@@ -9,10 +9,54 @@ export function codeOf(issue) {
   const n = Number(match?.[1]);
   return n >= 1 && n <= TOTAL ? n : null;
 }
+/**
+ * Every WB code listed under the dependency heading, on all of its lines. The heading ends at the next `## ` heading.
+ * A pattern that stopped at the end of the first line once made an Issue look ready while a later dependency was open.
+ */
 export function dependencies(issue) {
-  const section = /^##\s*(?:前置依赖|依赖)\s*\r?\n([\s\S]*?)(?=\r?\n##\s|$)/m.exec(issue.body ?? '')?.[1] ?? '';
-  return [...section.matchAll(/WB-(\d{3})/g)].map(x => Number(x[1]));
+  const lines = (issue.body ?? '').split(/\r?\n/);
+  const start = lines.findIndex(line => /^##\s*(?:前置依赖|依赖)\s*$/.test(line));
+  if (start < 0) return [];
+  const codes = [];
+  for (const line of lines.slice(start + 1)) {
+    if (/^##\s/.test(line)) break;
+    for (const match of line.matchAll(/WB-(\d{3})/g)) codes.push(Number(match[1]));
+  }
+  return codes;
 }
+const CI_WORKFLOWS=/^(Hulane OpenCode CI|Workbench CI)/;
+const JOB_FAILED=new Set(['failure','timed_out','startup_failure']);
+/**
+ * What the CI of one pull request head says. Only the latest run of each workflow counts, and its jobs are read one
+ * by one: a macOS job that the runner cancelled before it started is not a failed check, and a newer run of the same
+ * workflow replaces an older one. Without job information the run's own conclusion is used.
+ */
+export function ciVerdict(runs, jobsOf=()=>undefined) {
+  const latest=new Map();
+  for (const run of runs) {
+    if (!CI_WORKFLOWS.test(run.name ?? '')) continue;
+    const known=latest.get(run.name);
+    if (!known || Number(run.id) > Number(known.id)) latest.set(run.name, run);
+  }
+  if (!latest.size) return 'missing';
+  if ([...latest.values()].some(run => run.status !== 'completed')) return 'pending';
+  let cancelled=false;
+  for (const run of latest.values()) {
+    const jobs=jobsOf(run);
+    if (jobs === undefined) {
+      if (run.conclusion === 'success') continue;
+      if (run.conclusion === 'cancelled' || run.conclusion === 'skipped') { cancelled=true; continue; }
+      return 'failed';
+    }
+    if (jobs.some(job => job.status !== 'completed')) return 'pending';
+    for (const job of jobs) {
+      if (JOB_FAILED.has(job.conclusion)) return 'failed';
+      if (job.conclusion === 'cancelled') cancelled=true;
+    }
+  }
+  return cancelled ? 'cancelled' : 'passed';
+}
+
 export function selectWork(issues, prs, runs) {
   const tasks = new Map();
   for (const issue of issues) {
@@ -38,14 +82,17 @@ export function selectWork(issues, prs, runs) {
       if (pr.head?.repo?.full_name !== REPO || !safeBranch) {
         pending.push(`${code}: PR #${pr.number} is not a trusted task branch`); continue;
       }
-      const checks = runs.filter(r => r.head_sha === pr.head.sha && /^(Hulane OpenCode CI|Workbench CI)/.test(r.name));
-      if (checks.some(c => ['in_progress','queued','waiting'].includes(c.status))) {
-        pending.push(`${code}: CI pending for PR #${pr.number}`); continue;
-      }
-      if (checks.length && checks.every(c => c.conclusion === 'success')) {
-        pending.push(`${code}: PR #${pr.number} awaiting review`); continue;
-      }
-      return { mode:'repair',id,code,issue,branch:pr.head.ref,pr:pr.number,reason:'Failed or missing CI' };
+      // Only a check that actually failed is repaired. A repair cannot fix a cancelled runner or a missing run,
+      // and one launched for either of those rewrites a pull request that only waits for a person.
+      const verdict = ciVerdict(runs.filter(r => r.head_sha === pr.head.sha), run => run.jobs);
+      const waiting = {
+        pending: `CI running for PR #${pr.number}`,
+        passed: `PR #${pr.number} awaiting review`,
+        cancelled: `CI for PR #${pr.number} was cancelled, not failed; re-run it or review`,
+        missing: `PR #${pr.number} has no CI yet`,
+      };
+      if (verdict !== 'failed') { pending.push(`${code}: ${waiting[verdict]}`); continue; }
+      return { mode:'repair',id,code,issue,branch:pr.head.ref,pr:pr.number,reason:`Failed CI on PR #${pr.number}` };
     }
     return { mode:'new',id,code,issue,branch:`feat/${code}-autodev`,pr:0,reason:'Dependencies closed' };
   }
@@ -82,9 +129,25 @@ async function select() {
   const [issues,prs,runs]=await Promise.all([
     pages(`/repos/${REPO}/issues?state=all`),
     pages(`/repos/${REPO}/pulls?state=open`),
-    gh(`/repos/${REPO}/actions/runs?per_page=100`),
+    pages(`/repos/${REPO}/actions/runs?per_page=100`),
   ]);
-  const choice=selectWork(issues,prs,runs.workflow_runs??[]);
+  // The run list carries no jobs. They are fetched for the runs the verdicts are based on: the latest run of each
+  // workflow at the head of each open pull request from a task branch.
+  const candidates=[];
+  for (const pr of prs) {
+    if (pr.head?.repo?.full_name !== REPO) continue;
+    const latest=new Map();
+    for (const run of runs) {
+      if (run.head_sha !== pr.head.sha || !CI_WORKFLOWS.test(run.name ?? '')) continue;
+      if (!latest.has(run.name) || run.id > latest.get(run.name).id) latest.set(run.name, run);
+    }
+    candidates.push(...latest.values());
+  }
+  await Promise.all([...new Set(candidates)].map(async run => {
+    const {jobs}=await gh(`/repos/${REPO}/actions/runs/${run.id}/jobs?per_page=100`);
+    run.jobs=jobs.map(({name,status,conclusion})=>({name,status,conclusion}));
+  }));
+  const choice=selectWork(issues,prs,runs);
   output('action',choice.mode);
   if (choice.mode==='wait') { summary(`No safe task selected: ${choice.reason}`); return; }
   writeFileSync(`${process.env.RUNNER_TEMP||'/tmp'}/workbench-autodev-issue.md`,
@@ -93,6 +156,7 @@ async function select() {
   output('issue',choice.issue.number);
   summary(`Selected ${choice.code}: ${choice.mode} on ${choice.branch}; PR=${choice.pr||'new'}. ${choice.reason}`);
 }
+const AUTODEV_LOG='docs/WORKBENCH_AUTODEV_LOG.md';
 export function changedFiles() {
   const modified=execFileSync('git',['diff','--name-only','-z','HEAD'],{encoding:'utf8'}).split('\0');
   const untracked=execFileSync('git',['ls-files','--others','--exclude-standard','-z'],{encoding:'utf8'}).split('\0');
@@ -101,7 +165,9 @@ export function changedFiles() {
 export function validatePaths(paths) {
   if (paths.length>30) throw new Error('More than 30 changed files: manual review required');
   for (const path of paths) {
-    if (!(path.startsWith('workbench/')||path==='docs/SESSION_HANDOFF.md')) throw new Error(`Denied edit: ${path}`);
+    // The hand-written handoff is not touched by an autonomous run: two branches that both prepend to the same
+    // file conflict on GitHub, and its merge check ignores the union merge driver.
+    if (!(path.startsWith('workbench/')||path===AUTODEV_LOG)) throw new Error(`Denied edit: ${path}`);
     if (/(?:^|\/)\.env(?:\.|$)|\.(?:pem|key|p12|pfx)$|(?:secret|credential|private.?key)/i.test(path))
       throw new Error(`Secret-like file path is not permitted: ${path}`);
     if (existsSync(path)&&lstatSync(path).isSymbolicLink()) throw new Error(`Symlink edit denied: ${path}`);
