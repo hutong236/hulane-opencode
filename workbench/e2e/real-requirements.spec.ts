@@ -125,11 +125,11 @@ test('a requirement is created and revised through the page, and its history is 
   // The history shows all three snapshots, each with its own content hash, and one is readable.
   await top(page).getByRole('button', { name: '版本历史' }).click();
   const history = top(page);
-  await expect(history.getByText('V1')).toBeVisible();
-  await expect(history.getByText('V2')).toBeVisible();
-  await expect(history.getByText('V3')).toBeVisible();
-  await expect(history.getByText('初稿')).toBeVisible();
-  await expect(history.getByText('第三次修订')).toBeVisible();
+  // The versions are in their table; the two lists above it name versions too.
+  const table = history.getByRole('table', { name: '版本历史' });
+  for (const cell of ['V1', 'V2', 'V3']) await expect(table.getByRole('cell', { name: cell, exact: true })).toBeVisible();
+  await expect(table.getByText('初稿')).toBeVisible();
+  await expect(table.getByText('第三次修订')).toBeVisible();
   const hashes = await history.locator('td').filter({ hasText: /^[0-9a-f]{12}$/ }).allInnerTexts();
   expect(new Set(hashes.map(hash => hash.trim())).size).toBe(3);
   await history.getByRole('button', { name: '查看 V1' }).click();
@@ -167,7 +167,7 @@ test('the status chain works on the real API and restoring an old version never 
   // The restore is a new version of its own; V1..V3 stay exactly as they were.
   await top(page).getByRole('button', { name: '版本历史' }).click();
   const after = top(page);
-  await expect(after.getByText('V4')).toBeVisible();
+  await expect(after.getByRole('table', { name: '版本历史' }).getByRole('cell', { name: 'V4', exact: true })).toBeVisible();
   const later = (await after.locator('td').filter({ hasText: /^[0-9a-f]{12}$/ }).allInnerTexts()).map(hash => hash.trim());
   // Four rows, three distinct hashes: the restore is a copy of V1, so its content hash equals V1's. The hash
   // identifies content, not a version — and the three original snapshots keep theirs.
@@ -188,4 +188,39 @@ test('the status chain works on the real API and restoring an old version never 
   await after.getByRole('button', { name: '查看 V1' }).click();
   await expect(after.getByText('V1（只读快照）')).toBeVisible();
   await expect(after.getByText('需求中心 UI', { exact: true })).toBeVisible();
+});
+
+test('two versions are compared through the page and the view is the comparison that was stored', async ({ page }) => {
+  await openRequirements(page);
+  await rowOf(page, 'REQ-001').getByRole('button', { name: '版本历史' }).click();
+  const history = top(page);
+  await expect(history.getByRole('cell', { name: 'V4', exact: true })).toBeVisible();
+  // The latest change is already chosen: V3 against V4, the restore of V1.
+  const base = history.locator('.ant-select').filter({ has: page.getByRole('combobox', { name: '基准版本' }) })
+    .locator('.ant-select-selection-item');
+  await expect(base).toHaveText('V3');
+  await history.getByRole('button', { name: '比较版本' }).click();
+  const view = history.getByLabel('版本差分');
+  await expect(view.getByLabel('差分版本')).toHaveText('V3 → V4');
+  // Only the title went back to the first one.
+  for (const tag of ['新增 0', '修改 1', '删除 0', '待审核 0', '未变化 6']) {
+    await expect(view.getByText(tag, { exact: true })).toBeVisible();
+  }
+  await expect(view.getByLabel('修改 /title').getByLabel('差分值')).toHaveText(['需求中心 UI v3', '需求中心 UI']);
+
+  // What the page shows is the comparison that was stored, down to its hash.
+  const requirement = (await (await page.request.get(`${world.api.origin}/api/requirements`)).json()).requirements[0];
+  const stored = async () => (await (await page.request.get(
+    `${world.api.origin}/api/requirements/${requirement.id}/diffs`)).json()).diffs as {
+      id: string; base_version: number; target_version: number; diff_sha256: string;
+    }[];
+  const [only] = await stored();
+  expect([only.base_version, only.target_version]).toEqual([3, 4]);
+  await expect(view.getByLabel('差分哈希')).toHaveText(only.diff_sha256.slice(0, 16));
+
+  // The stored comparison is listed and opens from the list; that is not another comparison.
+  await expect(history.getByRole('table', { name: '已保存的差分' }).getByText('V3 → V4')).toBeVisible();
+  await history.getByRole('button', { name: '查看差分 V3 到 V4' }).click();
+  await expect(view.getByLabel('差分版本')).toHaveText('V3 → V4');
+  expect(await stored()).toHaveLength(1);
 });
