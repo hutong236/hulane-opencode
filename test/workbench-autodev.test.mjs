@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { codeOf, dependencies, selectWork, validateNoWeakening, validatePaths, weakenedScripts } from '../bin/workbench-autodev.mjs';
+import { ciVerdict, codeOf, dependencies, selectWork, validateNoWeakening, validatePaths, weakenedScripts } from '../bin/workbench-autodev.mjs';
 const make=()=>Array.from({length:28},(_,i)=>({
   number:i+5,title:`[WB-${String(i+1).padStart(3,'0')}] Task`,state:'open',
   body:i?'## 前置依赖\n- WB-001\n\n## 验收条件\n- WB-028':'## 依赖\n- 无'
@@ -52,4 +52,80 @@ test('a protected script counts as weakened only when an existing definition is 
   assert.deepEqual(weakenedScripts(before,{build:'tsc','test:e2e':'playwright test'}),['test']);
   assert.deepEqual(weakenedScripts(before,{...before,'test:e2e':'true',lint:'true',dev:'vite'}),['test:e2e']);
   assert.deepEqual(weakenedScripts({}, {test:'true'}),[]);
+});
+
+const run = (id, name, event, status, conclusion, extra = {}) => ({ id, name, event, status, conclusion, head_sha: 's1', ...extra });
+const jobs = (...pairs) => pairs.map(([name, status, conclusion]) => ({ name, status, conclusion }));
+const macOS = 'platform-install-smoke (macos-15)';
+
+test('a job the runner cancelled is not a failed check', () => {
+  // What happened to the first automated pull request: the push run lost its macOS job before it started, while
+  // the pull request run of the same commit passed it. The selector repaired a green pull request.
+  const runs = [
+    run(1, 'Hulane OpenCode CI', 'push', 'completed', 'failure',
+      { jobs: jobs(['core-tests (20)', 'completed', 'success'], [macOS, 'completed', 'cancelled']) }),
+    run(2, 'Workbench CI', 'push', 'completed', 'success'),
+    run(3, 'Hulane OpenCode CI', 'pull_request', 'completed', 'success', { jobs: jobs([macOS, 'completed', 'success']) }),
+    run(4, 'Workbench CI', 'pull_request', 'completed', 'success'),
+  ];
+  assert.equal(ciVerdict(runs, r => r.jobs), 'passed');
+  const pick = selectWork(make(), [pr], runs);
+  assert.equal(pick.mode, 'wait');
+  assert.match(pick.reason, /PR #33 awaiting review/);
+});
+
+test('a check that failed is still repaired, and a newer run replaces an older one of the same workflow', () => {
+  const failed = run(9, 'Workbench CI', 'pull_request', 'completed', 'failure',
+    { jobs: jobs(['workbench (20)', 'completed', 'success'], ['workbench (22)', 'completed', 'failure']) });
+  assert.equal(selectWork(make(), [pr], [failed]).mode, 'repair');
+  const rerun = run(10, 'Workbench CI', 'pull_request', 'completed', 'success',
+    { jobs: jobs(['workbench (22)', 'completed', 'success']) });
+  assert.equal(ciVerdict([failed, rerun], r => r.jobs), 'passed');
+  // A run whose jobs are unknown is judged by its own conclusion.
+  assert.equal(ciVerdict([failed]), 'failed');
+  assert.equal(ciVerdict([rerun]), 'passed');
+});
+
+test('cancelled, missing and running CI make the selector wait instead of rewriting the pull request', () => {
+  const cancelled = run(5, 'Workbench CI', 'pull_request', 'completed', 'failure',
+    { jobs: jobs(['workbench (22)', 'completed', 'cancelled']) });
+  for (const [runs, reason] of [
+    [[cancelled], /was cancelled, not failed/],
+    [[], /has no CI yet/],
+    [[run(6, 'Workbench CI', 'pull_request', 'completed', null, { jobs: jobs(['workbench (22)', 'in_progress', null]) })], /CI running/],
+    [[run(7, 'Workbench CI', 'pull_request', 'queued', null)], /CI running/],
+  ]) {
+    const pick = selectWork(make(), [pr], runs);
+    assert.equal(pick.mode, 'wait', String(reason));
+    assert.match(pick.reason, reason);
+  }
+});
+
+test('other commits and other workflows do not count', () => {
+  const elsewhere = run(11, 'Workbench CI', 'push', 'completed', 'failure', { head_sha: 'someone-elses-commit' });
+  const progress = run(12, 'Workbench 28 Issues progress', 'schedule', 'completed', 'failure');
+  // The selector hands the verdict only the runs of the pull request head; other workflows are never in it.
+  const pick = selectWork(make(), [pr], [elsewhere, progress]);
+  assert.equal(pick.mode, 'wait');
+  assert.match(pick.reason, /PR #33 has no CI yet/);
+});
+
+test('every dependency line counts, and the dependency section ends at the next heading', () => {
+  const issue = { body: '## 实现范围\n提到 WB-028 只是举例\n\n## 前置依赖\n- [WB-002](https://example.invalid/6)\n- [WB-010](https://example.invalid/14)\n\n## 可验收条件\n- WB-009 也被提到\n' };
+  // Reading only the first line made WB-012 look ready while WB-010 was still open.
+  assert.deepEqual(dependencies(issue), [2, 10]);
+  assert.deepEqual(dependencies({ body: '## 依赖\n- 无' }), []);
+  assert.deepEqual(dependencies({ body: '## 实现范围\n- WB-001' }), []);
+  assert.deepEqual(dependencies({}), []);
+  // The incident itself: WB-010 is still open, so WB-012 must not be selected even when everything else is finished.
+  const items = make();
+  for (const item of items) item.state = 'closed';
+  items[9].state = 'open';
+  items[11].state = 'open';
+  items[11].body = issue.body;
+  const busy = { ...pr, title: 'WB-010 in progress',
+    head: { ref: 'feat/WB-010-autodev', sha: 's1', repo: { full_name: 'hutong236/hulane-opencode' } } };
+  const choice = selectWork(items, [busy], [run(1, 'Workbench CI', 'pull_request', 'completed', 'success')]);
+  assert.equal(choice.mode, 'wait');
+  assert.match(choice.reason, /WB-12: blocked by 10/);
 });
