@@ -1,3 +1,13 @@
+### Workbench autonomous development — 2026-11-25: the selection failed on every run after #68
+
+- Task: the scheduled autonomous development workflow stopped working again, and the cause was mine. #68 read the list of the workflow runs with the helper that expects a plain list of rows, and the Actions API answers with an object that carries the rows under `workflow_runs`.
+- Branch: `fix/autodev-wrapped-actions-response`, from `main` `a2f7f6dee46176303e7456888f8fbc7d1476bb6c`.
+- Evidence: `node bin/workbench-autodev.mjs select` on `main` fails with "Unexpected GitHub response"; the same command on this branch answers "No safe task selected: WB-004: PR #65 is not a trusted task branch; WB-005: PR #67 awaiting review; WB-6: blocked by 5; …". The shape was read from the live API: `GET /repos/hutong236/hulane-opencode/actions/runs` answers HTTP 200 with an object `{total_count, workflow_runs}`, while the issues and pull request endpoints answer with a plain list.
+- Why the test did not catch it: the tests of the selector cover its pure functions; the helper that reads the API was never driven, and the Actions endpoint was mocked with the wrong shape. `rowsOf` and `pages` are exported now, and a new test reads both shapes, the pagination over a full page and the refusal of an answer that is neither a list nor an object with rows.
+- Validation: root `npm test` passed 206/206 (one test more than before) and `npm run check:syntax` passed. Removing the fix turns the new test red; with it, the selector answers correctly against the live API.
+- The cadence of the schedule is not ours to decide: the cron says every 30 minutes, but the two scheduled workflows of this repository ran every 8 to 12 hours over the last four days (autonomous development: 2026-11-22 21:26, 11-23 01:51, 11-23 09:54, 11-23 21:47, 11-24 05:38, 11-24 16:35, 11-25 01:09; progress: 11-21 22:56, 11-22 02:56, 11-22 11:02, 11-22 18:37, 11-23 00:06, 11-23 08:02, 11-23 20:28, 11-24 04:56, 11-24 15:42, 11-25 00:28). The runs are created late, not late in the queue: `run_started_at` equals `created_at` in every one of them.
+- Next: after this is merged the selection works again; the next scheduled run picks up the task that is ready. Issue #3 stays open; this is development automation, not production acceptance.
+
 ### Workbench autonomous development — 2026-11-24: first real publishing run, and a log file of its own
 
 - Task: confirm that publishing works for real, correct a wrong statement about merging, and stop autonomous runs from editing the hand-written handoff.
