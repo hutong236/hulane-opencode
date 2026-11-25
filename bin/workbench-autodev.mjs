@@ -93,6 +93,7 @@ async function select() {
   output('issue',choice.issue.number);
   summary(`Selected ${choice.code}: ${choice.mode} on ${choice.branch}; PR=${choice.pr||'new'}. ${choice.reason}`);
 }
+const AUTODEV_LOG='docs/WORKBENCH_AUTODEV_LOG.md';
 export function changedFiles() {
   const modified=execFileSync('git',['diff','--name-only','-z','HEAD'],{encoding:'utf8'}).split('\0');
   const untracked=execFileSync('git',['ls-files','--others','--exclude-standard','-z'],{encoding:'utf8'}).split('\0');
@@ -101,7 +102,9 @@ export function changedFiles() {
 export function validatePaths(paths) {
   if (paths.length>30) throw new Error('More than 30 changed files: manual review required');
   for (const path of paths) {
-    if (!(path.startsWith('workbench/')||path==='docs/SESSION_HANDOFF.md')) throw new Error(`Denied edit: ${path}`);
+    // The hand-written handoff is not touched by an autonomous run: two branches that both prepend to the same
+    // file conflict on GitHub, and its merge check ignores the union merge driver.
+    if (!(path.startsWith('workbench/')||path===AUTODEV_LOG)) throw new Error(`Denied edit: ${path}`);
     if (/(?:^|\/)\.env(?:\.|$)|\.(?:pem|key|p12|pfx)$|(?:secret|credential|private.?key)/i.test(path))
       throw new Error(`Secret-like file path is not permitted: ${path}`);
     if (existsSync(path)&&lstatSync(path).isSymbolicLink()) throw new Error(`Symlink edit denied: ${path}`);

@@ -1,3 +1,15 @@
+### Workbench autonomous development — 2026-11-24: first real publishing run, and a log file of its own
+
+- Task: confirm that publishing works for real, correct a wrong statement about merging, and stop autonomous runs from editing the hand-written handoff.
+- Branch: `fix/autodev-own-log-file`, from `main` `5ad8ef9a`. The remote branch head is the authoritative SHA.
+- First real run with publishing: [45450862344](https://github.com/hutong236/hulane-opencode/actions/runs/45450862344), dispatched on `main` at 17:38 UTC. It selected WB-005, ran the model for 5 minutes, verified 10 files, passed every check on the runner with 27 browser cases, pushed `feat/WB-005-autodev` and opened Draft pull request [#67](https://github.com/hutong236/hulane-opencode/pull/67). The CI of #67 passed on all 16 checks, so the selector now leaves WB-005 alone until a person reviews it.
+- Correction: #64 stated that `.gitattributes` with `merge=union` lets two branches that both prepend an entry to `SESSION_HANDOFF.md` merge without a conflict. That is true for a merge made with Git and false on GitHub: its pull request check ignores the driver and reported #65 as conflicting against the new `main`, while `git merge` of the same two versions was clean. This is a known limitation, [GitHub Community Discussion 9288](https://github.com/orgs/community/discussions/9288). `docs/WORKBENCH_AUTODEV.md` is corrected.
+- Change: an autonomous run writes its checkpoint to `docs/WORKBENCH_AUTODEV_LOG.md`. The runner refuses an edit of `SESSION_HANDOFF.md` and the agent is not allowed to make one, so an autonomous pull request does not overlap a hand-made one at the top of that file. The union driver stays on both files because it makes a local `git merge main` clean.
+- Files: `.github/workflows/workbench-autodev.yml`, `bin/workbench-autodev.mjs`, `test/workbench-autodev.test.mjs`, `test/workbench-autodev-workflow.test.mjs`, `.gitattributes`, `docs/WORKBENCH_AUTODEV.md`, `docs/WORKBENCH_AUTODEV_LOG.md`, `docs/SESSION_HANDOFF.md`.
+- Validation: `node --test test/workbench-autodev.test.mjs test/workbench-autodev-workflow.test.mjs` passed 13/13, and the full root `npm test` is the CI result of the pull request. Three deliberate breakages are each caught: the agent allowed to edit the handoff again, the log file without the union driver, the runner accepting an edit of the handoff. This change has not run through a real autonomous run yet; the next scheduled run shows it.
+- Known: #67 edits `SESSION_HANDOFF.md`. On GitHub it conflicts as soon as another change to the top of that file is merged; update it locally with `git merge main` and push. #67 and #65 both add schema migration 2, so whichever is merged second has to renumber its migration to 3 and adapt its tests.
+- Next: watch the next scheduled run write into the log file, and review #67. Issue #3 stays open; this is development automation, not production acceptance.
+
 ### Workbench autonomous development — 2026-11-25: workflow completed and verified by dry runs
 
 - Task: repair `.github/workflows/workbench-autodev.yml`, truncated since its first commit, and re-enable it at the owner's request.

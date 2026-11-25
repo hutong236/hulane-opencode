@@ -30,7 +30,8 @@ test('green or queued CI waits for approval or completion',()=>{
 test('does not modify fork PR or privileged file paths',()=>{
   const fork=structuredClone(pr);fork.head.repo.full_name='someone/fork';
   assert.equal(selectWork(make(),[fork],[]).mode,'wait');
-  assert.equal(validatePaths(['workbench/apps/web/src/App.tsx','docs/SESSION_HANDOFF.md']),true);
+  assert.equal(validatePaths(['workbench/apps/web/src/App.tsx','docs/WORKBENCH_AUTODEV_LOG.md']),true);
+  assert.throws(()=>validatePaths(['docs/SESSION_HANDOFF.md']),/Denied edit/);
   assert.throws(()=>validatePaths(['hulane/mcp/server.mjs']),/Denied edit/);
   assert.throws(()=>validatePaths(['.github/workflows/ci.yml']),/Denied edit/);
   assert.throws(()=>validatePaths(['workbench/.env.local']),/Secret-like/);
