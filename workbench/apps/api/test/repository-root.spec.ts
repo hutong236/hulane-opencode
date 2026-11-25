@@ -14,12 +14,12 @@ test('accepts canonical Git roots and rejects nested, non-Git and symlink paths'
     execFileSync('git', ['init', '-q', repo]);
     await mkdir(join(repo, 'nested'));
     assert.equal(await validateRepositoryRoot(repo), repo);
-    await assert.rejects(validateRepositoryRoot(join(repo, 'nested')), /Git worktree root/);
-    await assert.rejects(validateRepositoryRoot(temp), /Command failed|not a git repository/i);
+    await assert.rejects(validateRepositoryRoot(join(repo, 'nested')), /not_git_root/);
+    await assert.rejects(validateRepositoryRoot(temp), /not_git_root/);
     await assert.rejects(validateRepositoryRoot('relative/repo'), /absolute/);
     const alias = join(temp, 'alias');
     await symlink(repo, alias);
-    await assert.rejects(validateRepositoryRoot(alias), /Symbolic-link/);
+    await assert.rejects(validateRepositoryRoot(alias), /symlink/);
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
@@ -33,12 +33,12 @@ test('rejects bare repositories and ignores inherited Git redirection variables'
     await mkdir(valid);
     execFileSync('git', ['init', '-q', valid]);
     execFileSync('git', ['init', '-q', '--bare', bare]);
-    await assert.rejects(validateRepositoryRoot(bare), /non-bare Git worktree root|Command failed/);
+    await assert.rejects(validateRepositoryRoot(bare), /not_git_root/);
     const original = process.env.GIT_DIR;
     try {
       process.env.GIT_DIR = join(valid, '.git');
       assert.equal(await validateRepositoryRoot(valid), valid);
-      await assert.rejects(validateRepositoryRoot(temp), /Command failed|not a git repository/i);
+      await assert.rejects(validateRepositoryRoot(temp), /not_git_root/);
     } finally {
       if (original === undefined) delete process.env.GIT_DIR;
       else process.env.GIT_DIR = original;

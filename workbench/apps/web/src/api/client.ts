@@ -48,9 +48,25 @@ export interface RegisteredProject {
   name: string;
   repo_root: string;
   default_branch: string;
+  /** The `origin` URL without any user name or password; null when the repository has none. */
+  remote_url: string | null;
   revision: number;
   created_at: string;
   updated_at: string;
+}
+
+/** The API strips credentials before storing a remote. Never show them either, should one slip through. */
+function withoutCredentials(url: string): string | null {
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) return url;
+  try {
+    const parsed = new URL(url);
+    if (!parsed.username && !parsed.password) return url;
+    parsed.username = '';
+    parsed.password = '';
+    return parsed.href;
+  } catch {
+    return null;
+  }
 }
 
 export function decodeProjectList(value: unknown): RegisteredProject[] {
@@ -68,13 +84,41 @@ export function decodeProjectList(value: unknown): RegisteredProject[] {
         !(row.repo_root as string).startsWith('/') || ids.has(row.id as string)) {
       throw new ApiError('API 返回的数据结构不正确');
     }
+    // A remote is either null or a non-empty URL. Missing is not accepted: the field is part of the contract.
+    if (row.remote_url !== null &&
+        (typeof row.remote_url !== 'string' || !(row.remote_url as string).trim())) {
+      throw new ApiError('API 返回的数据结构不正确');
+    }
+    const remoteUrl = row.remote_url === null ? null : withoutCredentials(row.remote_url as string);
+    if (remoteUrl === null && row.remote_url !== null) throw new ApiError('API 返回的数据结构不正确');
     ids.add(row.id as string);
-    return Object.fromEntries([...fields.map(key => [key, row[key]]), ['revision', row.revision]]) as unknown as RegisteredProject;
+    const entries = [...fields.map(key => [key, row[key]]), ['remote_url', remoteUrl], ['revision', row.revision]];
+    return Object.fromEntries(entries) as unknown as RegisteredProject;
   });
 }
 
 export function getProjects(signal?: AbortSignal): Promise<RegisteredProject[]> {
   return requestJson('/api/projects', decodeProjectList, signal);
+}
+
+/** What the API says is wrong with a path, in words. Anything it does not name gets the general message. */
+const REJECTIONS: Record<string, string> = {
+  not_absolute: '必须使用绝对路径',
+  missing: '目录不存在',
+  not_directory: '该路径不是目录',
+  symlink: '路径中包含符号链接，请使用真实路径',
+  unreadable: '没有读取该目录的权限',
+  not_git_root: '该目录不是 Git 仓库的根目录',
+};
+
+async function rejectionReason(response: Response): Promise<string> {
+  try {
+    const payload = (await response.json()) as { reason?: unknown } | null;
+    const reason = payload?.reason;
+    return typeof reason === 'string' && Object.hasOwn(REJECTIONS, reason) ? REJECTIONS[reason] : '仓库路径或登记信息无效';
+  } catch {
+    return '仓库路径或登记信息无效';
+  }
 }
 
 /** Register a local Git repository. Server-side realpath/Git validation remains authoritative. */
@@ -95,9 +139,39 @@ export async function registerProject(input: { path: string; slug: string; name:
   }
   if (!response.ok) {
     if (response.status === 409) throw new ApiError('项目或仓库已登记', 409);
-    if (response.status === 400) throw new ApiError('仓库路径或登记信息无效', 400);
+    if (response.status === 400) throw new ApiError(await rejectionReason(response), 400);
     throw new ApiError(`API 请求失败：HTTP ${response.status}`, response.status);
   }
+  let payload: unknown;
+  try { payload = await response.json(); }
+  catch { throw new ApiError('API 返回无效 JSON', response.status); }
+  return decodeProjectList({ projects: [payload] })[0]!;
+}
+
+/** Rename the catalog entry only. `revision` must be the one the caller loaded, so a newer rename is never overwritten. */
+export async function renameProject(id: string, input: { name: string; revision: number }, signal?: AbortSignal): Promise<RegisteredProject> {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    throw new ApiError('项目 ID 无效', 400);
+  }
+  if (!Number.isSafeInteger(input.revision) || input.revision < 0) {
+    throw new ApiError('项目信息已过期，请刷新列表后重试', 409);
+  }
+  if (!input.name.trim() || input.name.trim().length > 120) throw new ApiError('项目名称需为 1–120 个字符', 400);
+  let response: Response;
+  try {
+    response = await fetch(`/api/projects/${id}`, {
+      method: 'PATCH', signal, cache: 'no-store',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: input.name, revision: input.revision }),
+    });
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    throw new ApiError('无法连接本地 API，请确认服务已启动');
+  }
+  if (response.status === 404) throw new ApiError('项目不存在', 404);
+  if (response.status === 409) throw new ApiError('项目已被其他操作修改，请关闭后刷新列表再重试', 409);
+  if (response.status === 400) throw new ApiError('项目名称无效', 400);
+  if (!response.ok) throw new ApiError(`API 请求失败：HTTP ${response.status}`, response.status);
   let payload: unknown;
   try { payload = await response.json(); }
   catch { throw new ApiError('API 返回无效 JSON', response.status); }
