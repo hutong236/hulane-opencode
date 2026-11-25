@@ -6,6 +6,9 @@ import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { WorkbenchDatabase, applyMigrations, BASE_MIGRATIONS, EXPECTED_TABLES } from '../src/index.ts';
 
+// The count follows the migration list, so adding a migration does not turn these mechanism tests red.
+const LATEST = BASE_MIGRATIONS.length;
+
 function fixture() {
   const dir = mkdtempSync(join(realpathSync(tmpdir()), 'wb-sqlite-spec-'));
   const database = new WorkbenchDatabase({ dataDirectory: dir, busyTimeoutMs: 50 });
@@ -20,8 +23,8 @@ test('fresh database enables WAL, foreign keys and required tables', () => {
     assert.equal(x.database.connection.pragma('busy_timeout', { simple: true }), 50);
     const tables = x.database.connection.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[];
     for (const name of EXPECTED_TABLES) assert.ok(tables.some(t => t.name === name), name);
-    assert.equal(x.database.connection.pragma('user_version', { simple: true }), 2);
-    assert.equal(applyMigrations(x.database.connection), 2);
+    assert.equal(x.database.connection.pragma('user_version', { simple: true }), LATEST);
+    assert.equal(applyMigrations(x.database.connection), LATEST);
   } finally { x.dispose(); }
 });
 
@@ -72,17 +75,18 @@ test('transaction rollback does not leak partial writes', () => {
 test('failed migration rolls back DDL and can retry corrected version', () => {
   const x = fixture();
   try {
+    const next = LATEST + 1;
     const invalid = [
       ...BASE_MIGRATIONS,
-      { version: 3, name: 'third', sql: 'CREATE TABLE incomplete_table(id TEXT); INVALID SQL;' },
+      { version: next, name: 'next', sql: 'CREATE TABLE incomplete_table(id TEXT); INVALID SQL;' },
     ];
     assert.throws(() => applyMigrations(x.database.connection, invalid));
-    assert.equal(x.database.connection.pragma('user_version', { simple: true }), 2);
-    assert.equal((x.database.connection.prepare('SELECT count(*) AS n FROM schema_migrations').get() as { n: number }).n, 2);
+    assert.equal(x.database.connection.pragma('user_version', { simple: true }), LATEST);
+    assert.equal((x.database.connection.prepare('SELECT count(*) AS n FROM schema_migrations').get() as { n: number }).n, LATEST);
     assert.equal((x.database.connection.prepare("SELECT count(*) AS n FROM sqlite_master WHERE name='incomplete_table'").get() as { n: number }).n, 0);
     assert.equal(applyMigrations(x.database.connection, [
-      ...BASE_MIGRATIONS, { version: 3, name: 'third', sql: 'CREATE TABLE completed_table(id TEXT);' },
-    ]), 3);
+      ...BASE_MIGRATIONS, { version: next, name: 'next', sql: 'CREATE TABLE completed_table(id TEXT);' },
+    ]), next);
     assert.throws(() => applyMigrations(x.database.connection), /Unsafe database downgrade/);
   } finally { x.dispose(); }
 });
@@ -124,12 +128,11 @@ test('a second writer respects the busy timeout while another writer holds the l
 test('migration checksums prevent changing previously installed SQL', () => {
   const x = fixture();
   try {
-    const altered = [{
-      ...BASE_MIGRATIONS[0],
-      sql: `${BASE_MIGRATIONS[0].sql}\n-- Unauthorized migration modification`,
-    }, ...BASE_MIGRATIONS.slice(1)];
+    const altered = BASE_MIGRATIONS.map((migration, index) => index !== 0 ? migration : {
+      ...migration, sql: `${migration.sql}\n-- Unauthorized migration modification`,
+    });
     assert.throws(() => applyMigrations(x.database.connection, altered), /Migration history mismatch/);
-    assert.equal(x.database.connection.pragma('user_version', { simple: true }), 2);
+    assert.equal(x.database.connection.pragma('user_version', { simple: true }), LATEST);
   } finally { x.dispose(); }
 });
 

@@ -104,7 +104,7 @@ jobs:
                   {"action": "glob", "resource": "*", "effect": "allow"},
                   {"action": "grep", "resource": "*", "effect": "allow"},
                   {"action": "edit", "resource": "workbench/*", "effect": "allow"},
-                  {"action": "edit", "resource": "docs/SESSION_HANDOFF.md", "effect": "allow"}
+                  {"action": "edit", "resource": "docs/WORKBENCH_AUTODEV_LOG.md", "effect": "allow"}
                 ]
               }
             }
@@ -114,7 +114,7 @@ jobs:
           You are implementing ONE small, verifiable step of the attached GitHub issue in this repository checkout.
 
           Hard limits. They are enforced, and a later workflow step rejects anything else:
-          - Edit only files under `workbench/`, plus one new checkpoint entry at the top of `docs/SESSION_HANDOFF.md`.
+          - Edit only files under `workbench/`, plus one new checkpoint entry at the top of `docs/WORKBENCH_AUTODEV_LOG.md`.
           - Never delete a file. Never change the test, lint, typecheck or build scripts of a package.json, `workbench/playwright.config.ts` or `workbench/scripts/lint.mjs`.
           - Never create or edit `.env*` files, keys or credentials, and never write a secret into any file.
           - You cannot run commands, tests or network requests. The next workflow step runs lint, typecheck, build, unit tests and the Playwright browser suite, and nothing is published unless all of them pass.
@@ -124,7 +124,7 @@ jobs:
           - Keep the change to at most 30 files: one bounded slice of the issue, with tests for the normal, failure and boundary cases.
           - Tests live in `workbench/apps/api/test/*.spec.ts` (Fastify `inject`), `workbench/apps/web/test/*.spec.ts` (`node:test`) and `workbench/e2e/*.spec.ts` (Playwright).
           - Every source file must end with a single newline and contain no trailing whitespace; that is checked before anything else.
-          - Finish by prepending a short checkpoint to `docs/SESSION_HANDOFF.md`: task, files, what was not verified, next step. Never state that tests passed.
+          - Finish by prepending a short checkpoint to `docs/WORKBENCH_AUTODEV_LOG.md`: task, files, what was not verified, next step. Never state that tests passed.
 
           End with a short summary: what you changed, what you could not do, and what remains for the issue.
           MD

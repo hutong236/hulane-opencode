@@ -151,6 +151,31 @@ CREATE INDEX ix_approvals_run ON approvals(run_id, created_at);
   },
   {
     version: 2,
+    name: 'project_remote_url',
+    // NULL when the repository has no origin. Credentials are removed before a URL reaches this column.
+    sql: `
+ALTER TABLE projects ADD COLUMN remote_url TEXT;
+`,
+  },
+  {
+    version: 3,
+    name: 'project_tags',
+    // Reserved for the impact analysis of WB-007: what a project provides (capability) and what it depends on
+    // (dependency). Unregistering a project deletes its tags with it. Nothing outside this package writes them yet.
+    sql: `
+CREATE TABLE project_tags (
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK(kind IN ('capability','dependency')),
+  value TEXT NOT NULL COLLATE NOCASE CHECK(length(value) BETWEEN 1 AND 64),
+  created_at TEXT NOT NULL,
+  PRIMARY KEY(project_id, kind, value)
+);
+
+CREATE INDEX ix_project_tags_kind_value ON project_tags(kind, value);
+`,
+  },
+  {
+    version: 4,
     name: 'requirement_version_authors_and_immutability',
     sql: `
 ALTER TABLE requirement_versions ADD COLUMN actor TEXT NOT NULL DEFAULT 'system';
@@ -174,7 +199,7 @@ END;
 export const EXPECTED_TABLES = [
   'projects', 'requirements', 'requirement_versions', 'requirement_diffs',
   'work_items', 'workflow_definitions', 'workflow_runs', 'workflow_steps',
-  'execution_events', 'approvals',
+  'execution_events', 'approvals', 'project_tags',
 ] as const;
 
 export function verifySchema(db: Sqlite.Database): void {

@@ -1,2 +1,4 @@
-# Every checkpoint and every autonomous run prepends an entry here. Keep both sides when two branches do.
+# Both files are logs that every branch prepends to. The union driver keeps the entries of both sides in a merge
+# made with Git itself; GitHub's pull request check ignores it and still reports a conflict.
 docs/SESSION_HANDOFF.md merge=union
+docs/WORKBENCH_AUTODEV_LOG.md merge=union
