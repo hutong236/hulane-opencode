@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { ciVerdict, codeOf, dependencies, selectWork, validateNoWeakening, validatePaths, weakenedScripts } from '../bin/workbench-autodev.mjs';
+import { ciVerdict, codeOf, dependencies, pages, rowsOf, selectWork, validateNoWeakening, validatePaths, weakenedScripts } from '../bin/workbench-autodev.mjs';
 const make=()=>Array.from({length:28},(_,i)=>({
   number:i+5,title:`[WB-${String(i+1).padStart(3,'0')}] Task`,state:'open',
   body:i?'## 前置依赖\n- WB-001\n\n## 验收条件\n- WB-028':'## 依赖\n- 无'
@@ -128,4 +128,37 @@ test('every dependency line counts, and the dependency section ends at the next 
   const choice = selectWork(items, [busy], [run(1, 'Workbench CI', 'pull_request', 'completed', 'success')]);
   assert.equal(choice.mode, 'wait');
   assert.match(choice.reason, /WB-12: blocked by 10/);
+});
+
+test('the rows of an endpoint are read from the shape the API really answers with', async () => {
+  // The Actions endpoints answer with an object that carries the rows, the others with a plain list. The test used to
+  // mock the Actions endpoint with a list, so the selector failed on every real run with "Unexpected GitHub response".
+  assert.deepEqual(rowsOf([{ id: 1 }]), [{ id: 1 }]);
+  assert.deepEqual(rowsOf({ total_count: 1, workflow_runs: [{ id: 1 }] }), [{ id: 1 }]);
+  assert.deepEqual(rowsOf({ total_count: 1, jobs: [{ id: 2 }] }), [{ id: 2 }]);
+  assert.equal(rowsOf({ total_count: 0 }), null);
+  assert.equal(rowsOf({ message: 'Not Found' }), null);
+  assert.equal(rowsOf(null), null);
+  assert.equal(rowsOf(42), null);
+
+  // The whole list of an Actions endpoint, page by page.
+  const asked = [];
+  const rows = await pages('/repos/x/actions/runs', async (path) => {
+    asked.push(path);
+    return { total_count: 1, workflow_runs: [{ id: 7, head_sha: 'abc' }] };
+  });
+  assert.deepEqual(rows, [{ id: 7, head_sha: 'abc' }]);
+  assert.deepEqual(asked, ['/repos/x/actions/runs?per_page=100&page=1']);
+
+  // A full page is followed by the next one.
+  let page = 0;
+  const many = await pages('/repos/x/pulls', async () => {
+    page += 1;
+    return page === 1 ? Array.from({ length: 100 }, (_, i) => ({ id: i })) : [{ id: 100 }];
+  });
+  assert.equal(many.length, 101);
+  assert.equal(page, 2);
+
+  // An answer that is neither a list nor an object with rows is refused.
+  await assert.rejects(() => pages('/repos/x/issues', async () => ({ message: 'Bad credentials' })), /Unexpected GitHub response/);
 });
