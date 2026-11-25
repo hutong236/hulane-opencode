@@ -107,11 +107,24 @@ async function gh(path) {
   if (!response.ok) throw new Error(`GitHub GET ${path}: HTTP ${response.status}`);
   return response.json();
 }
-async function pages(path) {
+/**
+ * The rows of a GitHub response. Most endpoints answer with a plain list; the Actions endpoints answer with an object
+ * that carries them under `workflow_runs` or `jobs`. Reading the list of an Actions endpoint as if it were the whole
+ * answer made the selection fail on every run, and the test mocked the endpoint with the wrong shape.
+ */
+export function rowsOf(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (payload && typeof payload==='object') {
+    for (const key of ['workflow_runs','jobs']) if (Array.isArray(payload[key])) return payload[key];
+  }
+  return null;
+}
+/** Every row of a paginated endpoint. `fetchRows` can be replaced in a test. */
+export async function pages(path, fetchRows=gh) {
   const result=[];
   for (let p=1;p<=10;p++) {
-    const rows=await gh(`${path}${path.includes('?')?'&':'?'}per_page=100&page=${p}`);
-    if (!Array.isArray(rows)) throw new Error('Unexpected GitHub response');
+    const rows=rowsOf(await fetchRows(`${path}${path.includes('?')?'&':'?'}per_page=100&page=${p}`));
+    if (!rows) throw new Error('Unexpected GitHub response');
     result.push(...rows);
     if (rows.length<100) return result;
   }
