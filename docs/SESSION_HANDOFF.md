@@ -1,3 +1,15 @@
+### Workbench autonomous development — 2026-11-26: a mention is not a delivery
+
+- Task: a defect in the guard that #71 added. It took a task code anywhere in a merged pull request, title or body, for the delivery of that task. On the real repository it held seven open tasks, WB-007, WB-010, WB-012, WB-013, WB-014, WB-024 and WB-028, because #68, #38, #34 and #35 quote those codes in their text or span them in a title. WB-010 was ready and P0, and the selector passed over it for WB-021, a P1 task. Found while checking why the selector chose WB-021.
+- Branch: `fix/autodev-delivery-by-title`, from `main` `48c33157278d15ab8b747ad585b788a07668e750`.
+- Rule now: a merged pull request delivers the task that its title names first, as in `WB-005: …` or `feat(workbench): WB-004 remaining scope …`. A task quoted in the text of another task's pull request is a mention. A title that spans several tasks, like `推进 WB-001～WB-028`, names WB-001 and no other. A pull request closed without merging delivers nothing.
+- Evidence: on the 42 merged pull requests the old rule held seven open tasks and the new rule none. The titles that carry a code at all are the deliveries of WB-001 to WB-005, which are closed. Against the live API the selector answered `Selected WB-021` before and `Selected WB-010` after; WB-006 still waits on pull request #74 and WB-007 is still blocked by WB-006.
+- Files: `bin/workbench-autodev.mjs` (`taskOfTitle`, the delivery check), `test/workbench-autodev.test.mjs`, `docs/WORKBENCH_AUTODEV.md`, `docs/SESSION_HANDOFF.md`.
+- Validation: root `npm test` passed 208/208 and `npm run check:syntax` passed. Six deliberate breakages are each caught: the guard removed; a mention in the text counted again; any task named in a title counted; a pull request closed without merging counted; a longer number or a code glued to a word read as a task; the last task named in a title read as its own. The test that had encoded the wrong rule, "a merged pull request that names the code anywhere counts as delivery", is rewritten with the three real cases.
+- Convention, now written in `docs/WORKBENCH_AUTODEV.md`: the title of a delivery pull request names its task, and no other task before it.
+- Also on this day: GitHub was degraded on 2026-11-25 after 15:00 UTC. The push of the third commit of #74 reached GitHub but its event was never processed, and one check run of the fourth commit finished with `success` while its status stayed `in_progress`. The fourth commit advanced the branch; the push run was started again for the stale status.
+- Next: WB-010 is the task the selector takes when the workflow runs; whoever takes it first opens a pull request that names it in the title. Issue #3 stays open; this is development automation, not production acceptance.
+
 ### Workbench requirements center — 2026-11-25: the list, the detail and the version history
 
 - Task: issue #72 — the requirement data layer and API landed with PR #67, but the requirements page was a navigation placeholder: status transitions and queries were only reachable through the API. This delivers the three pages and the safe Markdown rendering.

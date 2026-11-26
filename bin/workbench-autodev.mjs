@@ -13,6 +13,15 @@ export function codeOf(issue) {
  * Every WB code listed under the dependency heading, on all of its lines. The heading ends at the next `## ` heading.
  * A pattern that stopped at the end of the first line once made an Issue look ready while a later dependency was open.
  */
+/**
+ * The task a pull request's title names first, or null. That is the pull request's own task: a delivery is titled
+ * `WB-005: …` or `feat(workbench): WB-004 remaining scope …`. A task that a title only mentions is not named first
+ * by it, and a title that spans several tasks (`推进 WB-001～WB-028`) is about none of them.
+ */
+export function taskOfTitle(title) {
+  const match = /(?<![A-Z0-9-])WB-(\d{3})(?![0-9])/.exec(title ?? '');
+  return match ? Number(match[1]) : null;
+}
 export function dependencies(issue) {
   const lines = (issue.body ?? '').split(/\r?\n/);
   const start = lines.findIndex(line => /^##\s*(?:前置依赖|依赖)\s*$/.test(line));
@@ -94,9 +103,11 @@ export function selectWork(issues, prs, runs, merged = []) {
       if (verdict !== 'failed') { pending.push(`${code}: ${waiting[verdict]}`); continue; }
       return { mode:'repair',id,code,issue,branch:pr.head.ref,pr:pr.number,reason:`Failed CI on PR #${pr.number}` };
     }
-    // The change already landed in a merged pull request. The task waits for its acceptance: implementing it again
-    // would duplicate work that a person has already reviewed and merged.
-    const delivered = merged.find(pr => pr.merged_at && (pr.title?.includes(code) || pr.body?.includes(code)));
+    // The change already landed in a merged pull request whose title names this task. The task waits for its
+    // acceptance: implementing it again would duplicate work that a person has already reviewed and merged. Only
+    // the title counts. A task quoted in the text of another task's pull request is a mention, not a delivery, and
+    // taking it for one held a ready task back for a day.
+    const delivered = merged.find(pr => pr.merged_at && taskOfTitle(pr.title) === id);
     if (delivered) { pending.push(`${code}: delivered in PR #${delivered.number}, awaiting acceptance`); continue; }
     return { mode:'new',id,code,issue,branch:`feat/${code}-autodev`,pr:0,reason:'Dependencies closed' };
   }
