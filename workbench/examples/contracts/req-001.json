@@ -1,0 +1,63 @@
+{
+  "id": "REQ-001",
+  "title": "环境感知的资产、自动化与监控闭环",
+  "status": "open",
+  "exampleVersion": 1,
+  "environments": [
+    "dev",
+    "test",
+    "prod"
+  ],
+  "targetContracts": {
+    "cmdb": {
+      "field": "environment",
+      "rule": "每个资产都必须带有 environment，取值只能是 dev/test/prod；写入未知 environment 被拒绝。"
+    },
+    "automation": {
+      "field": "environment",
+      "rule": "执行请求必须指定 environment，且只能在该环境的作业上执行；环境不一致时返回 409 且不记录运行。"
+    },
+    "monitoring": {
+      "field": "environment",
+      "rule": "事件必须记录 environment，查询可按 environment 过滤；未知 environment 返回 400。"
+    }
+  },
+  "knownGap": {
+    "summary": "v1 示例有意不包含 environment 字段，三服务之间还没有环境闭环；本契约是下一步实现的验收目标。",
+    "services": [
+      "cmdb",
+      "automation",
+      "monitoring"
+    ]
+  },
+  "acceptance": [
+    {
+      "id": "REQ-001-AC1",
+      "service": "cmdb",
+      "given": "CMDB 中一个 environment=prod 的资产",
+      "when": "读取该资产",
+      "then": "响应包含 environment=prod；写入未知 environment 被拒绝"
+    },
+    {
+      "id": "REQ-001-AC2",
+      "service": "automation",
+      "given": "一个 environment=prod 的作业",
+      "when": "以 environment=test 触发运行",
+      "then": "返回 409 且运行列表不变；以 prod 触发则记录一次成功运行"
+    },
+    {
+      "id": "REQ-001-AC3",
+      "service": "monitoring",
+      "given": "dev 与 prod 两个环境的事件",
+      "when": "按 environment=prod 查询事件和告警",
+      "then": "只返回 prod 的记录；未知 environment 返回 400"
+    },
+    {
+      "id": "REQ-001-AC4",
+      "service": "cross-service",
+      "given": "CMDB 的 prod 资产、Automation 的 prod 运行、Monitoring 的 prod 事件",
+      "when": "按同一 environment 串起三个示例",
+      "then": "三份记录共享 environment=prod，可被同一验收脚本断言"
+    }
+  ]
+}
