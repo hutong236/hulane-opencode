@@ -32,6 +32,25 @@ export interface OpenCodeMessage {
   created: number;
 }
 
+/** One permission rule as the server reports it for an agent, in order. The last rule that matches wins. */
+export interface AgentPermission {
+  action: string;
+  /** `*`, or a pattern such as `*.env` or `/Users/x/.opencode/plan/*`. */
+  resource: string;
+  effect: 'allow' | 'ask' | 'deny';
+}
+
+/** An agent as the server lists it for a project, with the permissions it computed for it there. */
+export interface OpenCodeAgent {
+  id: string;
+  name: string;
+  mode: string;
+  hidden: boolean;
+  /** The server's own hidden agents come without one. */
+  description: string;
+  permissions: AgentPermission[];
+}
+
 export interface PromptInput {
   text: string;
   /** The agent to run, by name. Left out, the server picks its default agent. */
@@ -58,6 +77,13 @@ export interface OpenCodeAdapter {
   subscribeEvents(signal?: AbortSignal): AsyncIterable<ServerEvent>;
   /** Asks the server to stop what it is doing in the session. */
   abort(sessionID: string): Promise<{ interrupted: boolean }>;
+  /**
+   * The agents the server offers this project. The server loads them when a directory is first listed, so right after
+   * a start the list can be empty, and until it is not, an agent looked up by name is reported missing.
+   */
+  listAgents(): Promise<OpenCodeAgent[]>;
+  /** One agent with the permissions the server computed for this project, or null when there is none. */
+  getAgent(id: string): Promise<OpenCodeAgent | null>;
 }
 
 export interface OpenCodeClientOptions {
@@ -200,6 +226,54 @@ export class OpenCodeHttpAdapter implements OpenCodeAdapter {
     return answer;
   }
 
+  async listAgents(): Promise<OpenCodeAgent[]> {
+    const { directory, data } = await this.agentAnswer('/api/agent');
+    if (directory !== this.directory || !Array.isArray(data)) {
+      throw new OpenCodeError('protocol', 'The answer of /api/agent is not a list of this project\'s agents');
+    }
+    return data.map(readAgent).map(agent => mustBeAgent(agent, 'The answer of /api/agent is not a list of agents'));
+  }
+
+  async getAgent(id: string): Promise<OpenCodeAgent | null> {
+    if (typeof id !== 'string' || !/^[\w:-]{1,64}$/.test(id)) {
+      throw new OpenCodeError('invalid_request', 'An agent is named by its id');
+    }
+    let answer: { directory: string | null; data: unknown };
+    try { answer = await this.agentAnswer(`/api/agent/${id}`); }
+    catch (error) {
+      // Not there is an answer, not a failure. So is not loaded yet: that is why the list is asked first.
+      if (error instanceof OpenCodeError && error.kind === 'not_found') return null;
+      throw error;
+    }
+    if (answer.directory !== this.directory) {
+      throw new OpenCodeError('protocol', 'The server answered about another directory');
+    }
+    const agent = readAgent(answer.data);
+    if (!agent || agent.id !== id) throw new OpenCodeError('protocol', 'The answer is not that agent');
+    return agent;
+  }
+
+  /**
+   * The agents are answered as `{ location, data }`. The directory is read here, because it is what tells this
+   * project's answer from another's; the generic request unwraps `data` and drops it.
+   */
+  private async agentAnswer(path: string): Promise<{ directory: string | null; data: unknown }> {
+    let response: Response;
+    try {
+      response = await this.fetcher(`${this.origin}${path}`, {
+        method: 'GET', headers: this.headers(), signal: AbortSignal.timeout(this.timeoutMs),
+      });
+    } catch (error) { throw this.failure(error); }
+    if (!response.ok) throw await this.refusal(response);
+    const value = await this.json(response);
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      throw new OpenCodeError('protocol', `The answer of ${path} is not an agent answer`);
+    }
+    const row = value as Record<string, unknown>;
+    const location = row.location as { directory?: unknown } | undefined;
+    return { directory: typeof location?.directory === 'string' ? location.directory : null, data: row.data };
+  }
+
   async *subscribeEvents(signal?: AbortSignal): AsyncIterable<ServerEvent> {
     const controller = new AbortController();
     const forward = () => controller.abort(signal?.reason);
@@ -269,16 +343,19 @@ export class OpenCodeHttpAdapter implements OpenCodeAdapter {
         body: body === undefined ? undefined : JSON.stringify(body),
         signal: AbortSignal.timeout(this.timeoutMs),
       });
-    } catch (error) {
-      // `AbortSignal.timeout` aborts with a TimeoutError; anything else is a request that could not be made.
-      if (error instanceof Error && error.name === 'TimeoutError') {
-        throw new OpenCodeError('timeout', `The OpenCode server did not answer in ${this.timeoutMs} ms`);
-      }
-      throw new OpenCodeError('unavailable', 'The OpenCode server cannot be reached');
-    }
+    } catch (error) { throw this.failure(error); }
     if (!response.ok) throw await this.refusal(response);
     if (response.status === 204) return undefined as T;
     return read(dataOf(await this.json(response)));
+  }
+
+  /** Why a request could not be made: it ran out of time, or nothing answered. */
+  private failure(error: unknown): OpenCodeError {
+    // `AbortSignal.timeout` aborts with a TimeoutError; anything else is a request that could not be made.
+    if (error instanceof Error && error.name === 'TimeoutError') {
+      return new OpenCodeError('timeout', `The OpenCode server did not answer in ${this.timeoutMs} ms`);
+    }
+    return new OpenCodeError('unavailable', 'The OpenCode server cannot be reached');
   }
 
   /** The server answers an error as JSON with a `_tag`; the page it serves for unknown paths is not an answer. */
@@ -297,6 +374,11 @@ export class OpenCodeHttpAdapter implements OpenCodeAdapter {
     const message = typeof payload?.message === 'string' ? payload.message : '';
     if (tag === 'UnauthorizedError') return new OpenCodeError('unauthorized', message || 'Unauthorized', status);
     if (tag === 'SessionNotFoundError') return new OpenCodeError('not_found', message || 'No such session', status);
+    if (tag === 'AgentNotFoundError') return new OpenCodeError('not_found', message || 'No such agent', status);
+    // The directory a request named is not there any more.
+    if (tag === 'LocationNotFoundError') {
+      return new OpenCodeError('directory_unavailable', message || 'No such directory', status);
+    }
     if (tag === 'InvalidRequestError') return new OpenCodeError('invalid_request', message || 'The request was refused', status);
     if (tag && message) return new OpenCodeError('refused', `${tag}: ${message}`, status);
     return new OpenCodeError('protocol', `The OpenCode server answered ${status} without an error document`, status);
@@ -368,6 +450,34 @@ function mustBeSession(session: OpenCodeSession | null): OpenCodeSession {
 function mustBeMessage(message: OpenCodeMessage | null): OpenCodeMessage {
   if (!message) throw new OpenCodeError('protocol', 'The answer is not a message');
   return message;
+}
+
+function mustBeAgent(agent: OpenCodeAgent | null, message: string): OpenCodeAgent {
+  if (!agent) throw new OpenCodeError('protocol', message);
+  return agent;
+}
+
+function readAgent(value: unknown): OpenCodeAgent | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  // The server's own hidden agents are listed without a description.
+  const description = row.description ?? '';
+  if (typeof row.id !== 'string' || !row.id || typeof row.name !== 'string' || typeof row.mode !== 'string' ||
+      typeof row.hidden !== 'boolean' || typeof description !== 'string' || !Array.isArray(row.permissions)) {
+    return null;
+  }
+  const permissions: AgentPermission[] = [];
+  for (const item of row.permissions) {
+    const rule = item as Partial<AgentPermission> | null;
+    if (!rule || typeof rule !== 'object' || Array.isArray(rule) || typeof rule.action !== 'string' ||
+        typeof rule.resource !== 'string' || !['allow', 'ask', 'deny'].includes(rule.effect as string)) {
+      return null;
+    }
+    permissions.push({ action: rule.action, resource: rule.resource, effect: rule.effect as AgentPermission['effect'] });
+  }
+  return {
+    id: row.id, name: row.name, mode: row.mode, hidden: row.hidden, description, permissions,
+  };
 }
 
 /** The answer envelope of the server: most routes wrap what they return in `data`; a few answer bare. */

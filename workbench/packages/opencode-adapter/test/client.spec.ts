@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { OpenCodeError, OpenCodeHttpAdapter, VERIFIED_VERSION, assertVerifiedVersion } from '../src/index.ts';
-import { startMockOpenCode, type MockOpenCode } from './mock-server.ts';
+import {
+  OpenCodeError, OpenCodeHttpAdapter, READONLY_AGENT_ID, VERIFIED_VERSION, assertVerifiedVersion, managedConfigContent,
+  readOnlyProblems,
+} from '../src/index.ts';
+import { startMockOpenCode, type MockOpenCode } from './mock-server.mjs';
 
 const ONE = '/projects/one';
 const TWO = '/projects/two';
+const THREE = '/projects/three';
 
 async function fixture(options: { password?: string; directory?: string } = {}) {
   const server = await startMockOpenCode({ directory: options.directory ?? ONE, password: options.password });
@@ -221,5 +225,61 @@ test('a stream that is stopped before it connects yields nothing and fails nothi
     const events: unknown[] = [];
     for await (const event of adapter().subscribeEvents(stopped.signal)) events.push(event);
     assert.deepEqual(events, []);
+  } finally { await server.close(); }
+});
+
+test('the agents of the project are listed, and one is read by name once its list was asked', async () => {
+  const { server, adapter } = await fixture();
+  try {
+    // Right after a start the list can be empty. That is asked again, not taken for the project's agents.
+    server.agentFirstListEmpty = true;
+    assert.deepEqual(await adapter(ONE).listAgents(), []);
+    assert.deepEqual((await adapter(ONE).listAgents()).map(agent => agent.id), ['build', 'compaction', 'title', 'summary', 'plan']);
+    assert.deepEqual([server.requests.at(-1)?.method, server.requests.at(-1)?.path, server.requests.at(-1)?.directory],
+      ['GET', '/api/agent', ONE]);
+    const plan = await adapter(ONE).getAgent('plan');
+    assert.equal(plan?.mode, 'primary');
+    assert.deepEqual(plan?.permissions.map(rule => rule.action), ['*', 'read', 'read', 'read', 'question', 'edit', 'edit']);
+    // The server's hidden agents come without a description.
+    assert.deepEqual((await adapter(ONE).getAgent('title'))?.description, '');
+    assert.equal(await adapter(ONE).getAgent('nobody'), null);
+
+    // Another directory's agents are not loaded by asking for this one's, and by name they come only after its list.
+    assert.equal(await adapter(TWO).getAgent('plan'), null);
+    await adapter(TWO).listAgents();
+    assert.equal((await adapter(TWO).getAgent('plan'))?.id, 'plan');
+
+    // A directory that is not there any more.
+    server.missingDirectories.add(THREE);
+    await assert.rejects(adapter(THREE).listAgents(), (error: unknown) => kindOf(error) === 'directory_unavailable');
+    await assert.rejects(adapter(THREE).getAgent('plan'), (error: unknown) => kindOf(error) === 'directory_unavailable');
+    // Answers that are not what was asked for: about another directory, or without the rules.
+    await assert.rejects(adapter().getAgent('not an id'), (error: unknown) => kindOf(error) === 'invalid_request');
+    server.agentLocation = TWO;
+    await assert.rejects(adapter(ONE).listAgents(), (error: unknown) => kindOf(error) === 'protocol');
+    await assert.rejects(adapter(ONE).getAgent('plan'), (error: unknown) => kindOf(error) === 'protocol');
+    server.agentLocation = null;
+    server.agentShape = 'malformed';
+    await assert.rejects(adapter(ONE).listAgents(), (error: unknown) => kindOf(error) === 'protocol');
+    await assert.rejects(adapter(ONE).getAgent('plan'), (error: unknown) => kindOf(error) === 'protocol');
+    // Another agent under the name that was asked for is not that agent.
+    server.agentShape = 'another';
+    await assert.rejects(adapter(ONE).getAgent('plan'), (error: unknown) => kindOf(error) === 'protocol');
+  } finally { await server.close(); }
+});
+
+test('the read-only agent comes back with the rules the server computed, and is proven by them', async () => {
+  const server = await startMockOpenCode({ configContent: managedConfigContent(undefined) });
+  try {
+    const adapter = new OpenCodeHttpAdapter({ baseUrl: server.origin, directory: ONE });
+    // By name alone it is not there yet: the list is what makes the server load the agents of a directory.
+    assert.equal(await adapter.getAgent(READONLY_AGENT_ID), null);
+    assert.ok((await adapter.listAgents()).some(agent => agent.id === READONLY_AGENT_ID));
+    const agent = await adapter.getAgent(READONLY_AGENT_ID);
+    assert.equal(agent?.id, READONLY_AGENT_ID);
+    assert.deepEqual(readOnlyProblems(agent!), []);
+    // Nothing was written anywhere to get to know this agent.
+    assert.deepEqual(server.requests.map(request => `${request.method} ${request.path}`),
+      ['GET /api/agent/workbench-readonly', 'GET /api/agent', 'GET /api/agent/workbench-readonly']);
   } finally { await server.close(); }
 });
