@@ -1,0 +1,20 @@
+{
+  "name": "example-automation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Sandbox automation runner for REQ-001; simulated only, no production access.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "tsx src/server.ts",
+    "test": "tsx --test test/*.spec.ts"
+  },
+  "dependencies": {
+    "fastify": "5.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.30",
+    "tsx": "4.20.3",
+    "typescript": "5.8.3"
+  }
+}

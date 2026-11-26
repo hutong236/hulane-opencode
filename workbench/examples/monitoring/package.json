@@ -1,0 +1,20 @@
+{
+  "name": "example-monitoring",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Sandbox monitoring events and alerts for REQ-001; fixed fake data only.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "tsx src/server.ts",
+    "test": "tsx --test test/*.spec.ts"
+  },
+  "dependencies": {
+    "fastify": "5.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.30",
+    "tsx": "4.20.3",
+    "typescript": "5.8.3"
+  }
+}
