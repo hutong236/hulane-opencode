@@ -11,11 +11,13 @@ const reasonOf = (error: unknown) => error instanceof RepositoryRootError ? erro
 
 /** Build an application without opening a socket, so tests can use inject(). */
 export function buildApp(options: { database?: WorkbenchDatabase; opencode?: OpenCodeOptions } = {}) {
-  const app = Fastify({ logger: true });
+  // A session's event stream is a connection the application's own lifecycle does not track, so ending the
+  // application closes the connections itself instead of waiting for a reader that may never hang up.
+  const app = Fastify({ logger: true, forceCloseConnections: true });
   let ownedDatabase: WorkbenchDatabase | undefined;
   const database = () => options.database ?? (ownedDatabase ??= new WorkbenchDatabase());
   // In one hook, in this order: the servers are ended while their records can still be written.
-  const opencode = new OpenCodeServers(database, options.opencode);
+  const opencode = new OpenCodeServers(database, options.opencode, options.opencode?.mayAsk);
   app.decorate('opencode', opencode);
   app.addHook('onClose', async () => {
     await opencode.close();

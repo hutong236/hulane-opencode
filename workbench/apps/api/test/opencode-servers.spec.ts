@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { test, type TestContext } from 'node:test';
 import { WorkbenchDatabase, type OpenCodeServerRecord } from '@hulane/workbench-database';
-import { describeProcess, managedConfigContent, type ProcessIdentity } from '@hulane/workbench-opencode-adapter';
+import { describeProcess, connectOpenCode, managedConfigContent, type ProcessIdentity } from '@hulane/workbench-opencode-adapter';
 import { startMockOpenCode } from '../../../packages/opencode-adapter/test/mock-server.mjs';
 import { buildApp } from '../src/app.js';
 import type { OpenCodeOptions } from '../src/opencode.js';
@@ -594,4 +594,251 @@ test('the server ends the OpenCode servers it started before it goes, and sorts 
     } finally {
       server.kill('SIGKILL');
     }
+  });
+
+const sessionsUrl = (id: string) => `/api/projects/${id}/opencode/sessions`;
+
+test('a session is created under the read-only agent, is asked as its texts come, and is remembered after the server stops',
+  { timeout: 60_000 }, async (t) => {
+    const h = await harness(t);
+    const { id } = await h.register('one');
+    const sessions = sessionsUrl(id);
+
+    // No server is held. What is not a text and not a decision is refused here, before a server is even asked for.
+    const without = await h.call('GET', sessions);
+    assert.deepEqual([without.statusCode, without.json().reason, without.json().server], [409, 'no_server', null]);
+    assert.equal((await h.call('POST', sessions, {})).json().reason, 'no_server');
+    assert.equal((await h.call('POST', `${sessions}/ses_none00001/prompt`, { text: '   ' })).statusCode, 400,
+      'a text that is not one has to be refused before the server is looked for');
+    assert.equal((await h.call('POST', `${sessions}/ses_none00001/permissions/per_x/reply`, { decision: 'perhaps' })).statusCode, 400,
+      'a decision that is not one has to be refused before the server is looked for');
+
+    const started = await h.call('POST', url(id), { mode: 'managed' });
+    assert.equal(started.statusCode, 201, started.body);
+
+    // A session is created, switched to the agent that is proven read-only, and given out only as switched.
+    const created = await h.call('POST', sessions, { title: 'First look' });
+    assert.equal(created.statusCode, 201, created.body);
+    const session = created.json().session as { id: string; agent: string; title: string };
+    assert.match(session.id, /^ses_[A-Za-z0-9]+$/, created.body);
+    assert.equal(session.agent, 'workbench-readonly', created.body);
+    // It is remembered at the moment it is made, before anything has asked the server for a list.
+    assert.deepEqual(h.database.opencodeSessions.forProject(id).map(one => one.session_id), [session.id]);
+
+    // The server lists it as the project's own, and the Workbench remembers it.
+    const listed = await h.call('GET', sessions);
+    assert.equal(listed.statusCode, 200, listed.body);
+    assert.deepEqual((listed.json().sessions as Array<{ id: string }>).map(one => one.id), [session.id]);
+    assert.deepEqual(
+      (listed.json().recorded as Array<{ session_id: string; title: string; on_server: boolean }>)
+        .map(one => [one.session_id, one.title, one.on_server]),
+      [[session.id, 'First look', true]],
+    );
+
+    // A text is queued, and the answer comes later; for now the user's own message is what comes back.
+    const prompted = await h.call('POST', `${sessions}/${session.id}/prompt`, { text: 'What is in README.md?' });
+    assert.deepEqual(
+      [prompted.statusCode, prompted.json().message.type, prompted.json().message.text],
+      [202, 'user', 'What is in README.md?'],
+    );
+    const messages = await h.call('GET', `${sessions}/${session.id}/messages`);
+    // The switch of the agent is itself an entry of the conversation, before the text that was queued.
+    assert.deepEqual(
+      (messages.json().messages as Array<{ type: string; text: string }>)
+        .map(one => [one.type, one.text]),
+      [['agent-switched', ''], ['user', 'What is in README.md?']],
+    );
+    // A session that asks for nothing yet, and a run that is interrupted.
+    assert.deepEqual((await h.call('GET', `${sessions}/${session.id}/permissions`)).json().permissions, []);
+    assert.deepEqual((await h.call('POST', `${sessions}/${session.id}/abort`)).json(), { interrupted: true });
+
+    // What is no session here, no request of it, no session id at all: said so, each with its status.
+    assert.equal((await h.call('GET', `${sessions}/ses_notours01/messages`)).statusCode, 404);
+    assert.equal((await h.call('POST', `${sessions}/${session.id}/permissions/per_nobody1/reply`, { decision: 'reject' })).statusCode, 404);
+    assert.equal((await h.call('POST', `${sessions}/${session.id}/permissions/per_nobody1/reply`, { decision: 'perhaps' })).statusCode, 400);
+    assert.equal((await h.call('GET', `${sessions}/not-a-session/messages`)).statusCode, 400);
+    assert.equal((await h.call('POST', sessions, { title: 'x'.repeat(501) })).statusCode, 400);
+
+    // With the server gone nothing more is asked of it, but the Workbench still knows the session was there.
+    const stopped = await h.call('DELETE', url(id));
+    assert.deepEqual([stopped.statusCode, stopped.json().server.state], [200, 'stopped']);
+    const afterStop = await h.call('GET', sessions);
+    assert.deepEqual([afterStop.statusCode, afterStop.json().reason], [409, 'no_server']);
+    const remembered = await h.call('GET', `${sessions}/recorded`);
+    assert.deepEqual(
+      (remembered.json().recorded as Array<{ session_id: string; on_server: boolean }>)
+        .map(one => [one.session_id, one.on_server]),
+      [[session.id, true]],
+    );
+    assert.deepEqual(h.database.opencodeSessions.forProject(id).map(one => one.session_id), [session.id]);
+  });
+
+test('no text is given to a session that another client has switched away from the read-only agent',
+  { timeout: 60_000 }, async (t) => {
+    const h = await harness(t);
+    const { id, root } = await h.register('one');
+    const server = await startMockOpenCode({ password: 'p', configContent: managedConfigContent(undefined) });
+    t.after(() => server.close());
+    const attached = await h.call('POST', url(id), { mode: 'attached', baseUrl: server.origin, password: 'p' });
+    assert.equal(attached.statusCode, 201, attached.body);
+    assert.equal((attached.json().server as { readonly_agent: boolean }).readonly_agent, true, attached.body);
+
+    const created = await h.call('POST', sessionsUrl(id), {});
+    assert.equal(created.statusCode, 201, created.body);
+    const session = created.json().session as { id: string; agent: string };
+    assert.equal(session.agent, 'workbench-readonly', created.body);
+
+    // Somebody else with the password of the server switches the session's agent. The next text is refused here,
+    // and nothing is queued on the server for it.
+    const theirs = await connectOpenCode({ baseUrl: server.origin, directory: root, password: 'p' });
+    await theirs.adapter.setSessionAgent(session.id, 'plan');
+    const refused = await h.call('POST', `${sessionsUrl(id)}/${session.id}/prompt`, { text: 'list the files' });
+    assert.deepEqual([refused.statusCode, refused.json().reason], [409, 'not_readonly']);
+    assert.equal(
+      server.requests.some(request => request.path.endsWith('/prompt')),
+      false,
+      'something was queued on the server for a session that does not run the read-only agent',
+    );
+    // Reading the conversation is not giving a task, and still answers.
+    assert.equal((await h.call('GET', `${sessionsUrl(id)}/${session.id}/messages`)).statusCode, 200);
+
+    // A session that another client made on the server directly is picked up when the project's sessions are read.
+    const madeDirectly = await theirs.adapter.createSession({ title: 'Made directly' });
+    const listed = await h.call('GET', sessionsUrl(id));
+    assert.deepEqual(
+      (listed.json().recorded as Array<{ session_id: string; title: string }>)
+        .map(one => [one.session_id, one.title]),
+      [[madeDirectly.id, 'Made directly'], [session.id, '']],
+    );
+  });
+
+test('nothing is queued while the asker of the Workbench says no', { timeout: 60_000 }, async (t) => {
+    const h = await harness(t, { mayAsk: async () => false });
+    const { id } = await h.register('one');
+    const started = await h.call('POST', url(id), { mode: 'managed' });
+    assert.equal(started.statusCode, 201, started.body);
+    const created = await h.call('POST', sessionsUrl(id), {});
+    const session = created.json().session as { id: string };
+    assert.equal(created.statusCode, 201, created.body);
+
+    const refused = await h.call('POST', `${sessionsUrl(id)}/${session.id}/prompt`, { text: 'Anything.' });
+    assert.deepEqual([refused.statusCode, refused.json().reason], [409, 'not_readonly']);
+    // Reading is not asking, and a session is still created; only the text waits.
+    assert.equal((await h.call('GET', `${sessionsUrl(id)}/${session.id}/messages`)).statusCode, 200);
+    assert.equal((await h.call('POST', sessionsUrl(id), { title: 'another' })).statusCode, 201);
+  });
+
+test('the events of one session stream out of the route, and the others do not', { timeout: 60_000 }, async (t) => {
+    const h = await harness(t);
+    const { id } = await h.register('one');
+    const server = await startMockOpenCode({ password: 'p', configContent: managedConfigContent(undefined) });
+    t.after(() => server.close());
+    const attached = await h.call('POST', url(id), { mode: 'attached', baseUrl: server.origin, password: 'p' });
+    assert.equal(attached.statusCode, 201, attached.body);
+    const mine = (await h.call('POST', sessionsUrl(id), {})).json().session as { id: string };
+    const theirs = (await h.call('POST', sessionsUrl(id), {})).json().session as { id: string };
+    const streamUrl = `${sessionsUrl(id)}/${mine.id}/events`;
+
+    // Before anything streams, what went wrong is said the usual way.
+    assert.equal((await h.call('GET', `/api/projects/${NO_PROJECT}/opencode/sessions/${mine.id}/events`)).statusCode, 404);
+    assert.equal((await h.call('GET', `${sessionsUrl(id)}/bad-id/events`)).statusCode, 400);
+
+    await h.app.listen({ port: 0, host: '127.0.0.1' });
+    const address = `http://127.0.0.1:${(h.app.server.address() as { port: number }).port}`;
+    // A session the server has none of is a JSON answer, never a stream that opens and stays open. The wait is
+    // bounded, so that a route which streams instead of refusing fails here in seconds.
+    const unknown = await Promise.race([
+      fetch(`${address}${sessionsUrl(id)}/ses_nosuch001/events`),
+      new Promise<'opened'>((resolve) => setTimeout(() => resolve('opened'), 3_000)),
+    ]);
+    try {
+      assert.notEqual(unknown, 'opened', 'the events route opened a stream for a session that is not in this project');
+      if (unknown !== 'opened') {
+        assert.equal(unknown.status, 404, `a missing session is refused: ${unknown.status}`);
+        assert.ok(
+          (unknown.headers.get('content-type') ?? '').startsWith('application/json'),
+          `a refusal before the stream is JSON, not ${(unknown.headers.get('content-type'))}`,
+        );
+      }
+    } finally {
+      if (unknown !== 'opened') await unknown.body?.cancel().catch(() => undefined);
+    }
+
+    // A route that never answers has to fail here, not hang the suite.
+    const response = await Promise.race([
+      fetch(`${address}${streamUrl}`),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('the events route did not answer in 10s')), 10_000)),
+    ]);
+    assert.equal(response.status, 200, `the events route answered ${response.status}`);
+    assert.equal(response.headers.get('content-type'), 'text/event-stream', 'the answer is not an event stream');
+    assert.ok(response.body, 'the answer has no body to read');
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let text = '';
+    try {
+      // The route answers only once its source is on the server's stream; from then on what is emitted arrives.
+      for (let attempt = 0; attempt < 100 && !server.requests.some(request => request.path === '/api/event'); attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 20));
+      }
+      server.emit({ type: 'session.something', data: { sessionID: theirs.id } });
+      server.ask(mine.id, 'read', ['.env']);
+      // The whole read waits at most ten seconds, so that a broken route fails here instead of hanging the suite.
+      const deadline = Date.now() + 10_000;
+      while (Date.now() < deadline && !text.includes('permission.asked')) {
+        const next = await Promise.race([
+          reader.read(),
+          new Promise<'tick'>(resolve => setTimeout(() => resolve('tick'), 1_000)),
+        ]);
+        if (next === 'tick') continue;
+        if (next.done) break;
+        text += decoder.decode(next.value, { stream: true });
+      }
+    } finally { await reader.cancel().catch(() => undefined); }
+    const seen = text.split('\n\n').filter(one => one.startsWith('data: '))
+      .map(one => JSON.parse(one.slice(6)) as { type: string; data: { sessionID?: string } });
+    assert.ok(
+      seen.some(event => event.type === 'permission.asked' && event.data.sessionID === mine.id),
+      `the ask of this session did not arrive: ${text}`,
+    );
+    assert.ok(!seen.some(event => event.data.sessionID === theirs.id), `another session's event came through: ${text}`);
+    // After the reader hangs up, the application answers as before.
+    assert.equal((await h.call('GET', sessionsUrl(id))).statusCode, 200);
+  });
+
+test('a real server gives a session that runs the read-only agent from its first moment, and it is remembered',
+  { skip: installed !== 'opencode v2.2.7', timeout: 120_000 }, async (t) => {
+    const h = await harness(t, { command: [process.env.OPENCODE_BIN ?? 'opencode'] });
+    const { id, root } = await h.register('one');
+    // A home and data, config, state and cache of its own: nothing of the developer's OpenCode is read or written.
+    mkdirSync(join(h.temp, 'home'), { recursive: true });
+    fakeVariables(t, {
+      HOME: join(h.temp, 'home'), XDG_DATA_HOME: join(h.temp, 'oc-data'), XDG_CONFIG_HOME: join(h.temp, 'oc-config'),
+      XDG_STATE_HOME: join(h.temp, 'oc-state'), XDG_CACHE_HOME: join(h.temp, 'oc-cache'),
+    });
+    const started = await h.call('POST', url(id), { mode: 'managed' });
+    assert.equal(started.statusCode, 201, started.body);
+    const server = started.json().server as OpenCodeServerRecord;
+    t.after(() => { try { process.kill(server.pid as number, 'SIGKILL'); } catch { /* gone */ } });
+
+    // A session is created on the real server and switched to the read-only agent, and no model is asked anything:
+    // no prompt is sent in this test.
+    const created = await h.call('POST', sessionsUrl(id), { title: 'Real' });
+    assert.equal(created.statusCode, 201, created.body);
+    const session = created.json().session as { id: string; agent: string };
+    assert.equal(session.agent, 'workbench-readonly', created.body);
+    const listed = await h.call('GET', sessionsUrl(id));
+    assert.deepEqual((listed.json().sessions as Array<{ id: string }>).map(one => one.id), [session.id]);
+    const messages = await h.call('GET', `${sessionsUrl(id)}/${session.id}/messages`);
+    // The switch of the agent is itself an entry of the conversation. Nothing else was asked of the model.
+    assert.deepEqual(
+      (messages.json().messages as Array<{ type: string; agent: string | null }>)
+        .map(one => [one.type, one.agent]),
+      [['agent-switched', 'workbench-readonly']],
+    );
+    // Nothing was written into the project for it.
+    assert.deepEqual(readdirSync(root).filter(name => name !== '.git'), []);
+
+    const stopped = await h.call('DELETE', url(id));
+    assert.deepEqual([stopped.statusCode, gone(server.pid as number)], [200, true]);
+    assert.deepEqual(h.database.opencodeSessions.forProject(id).map(one => one.session_id), [session.id]);
   });

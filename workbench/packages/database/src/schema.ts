@@ -226,12 +226,30 @@ CREATE TABLE opencode_servers (
 );
 `,
   },
+  {
+    version: 6,
+    name: 'opencode_sessions',
+    // The sessions the Workbench gave a project, by the id the OpenCode server gave them. The server is where a
+    // session lives and where it is found again after a restart; this is what the Workbench still knows of a
+    // project's sessions while no server is running. `on_server` says whether the server listed it last time.
+    sql: `
+CREATE TABLE opencode_sessions (
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  session_id TEXT NOT NULL CHECK(length(session_id) BETWEEN 4 AND 128),
+  title TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL,
+  on_server INTEGER NOT NULL DEFAULT 1 CHECK(on_server IN (0,1)),
+  PRIMARY KEY(project_id, session_id)
+);
+`,
+  },
 ] as const;
 
 export const EXPECTED_TABLES = [
   'projects', 'requirements', 'requirement_versions', 'requirement_diffs',
   'work_items', 'workflow_definitions', 'workflow_runs', 'workflow_steps',
-  'execution_events', 'approvals', 'project_tags', 'opencode_servers',
+  'execution_events', 'approvals', 'project_tags', 'opencode_servers', 'opencode_sessions',
 ] as const;
 
 export function verifySchema(db: Sqlite.Database): void {

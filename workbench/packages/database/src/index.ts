@@ -23,3 +23,5 @@ export { OpenCodeServerRepository, OPENCODE_SERVER_STATES } from './opencode-ser
 export type {
   NewOpenCodeServer, OpenCodeServerKind, OpenCodeServerRecord, OpenCodeServerState,
 } from './opencode-servers.js';
+export { OpenCodeSessionRepository } from './opencode-sessions.js';
+export type { OpenCodeSessionRecord, SeenSession } from './opencode-sessions.js';

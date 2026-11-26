@@ -1,7 +1,7 @@
 /** Types of `mock-server.mjs`, for the tests that start it in their own process. */
 export interface AgentPermission { action: string; resource: string; effect: string }
 export interface AgentRow {
-  id: string; name: string; mode: string; hidden: boolean; description: string; permissions: AgentPermission[];
+  id: string; name: string; mode: string; hidden: boolean; description?: string; permissions: AgentPermission[];
 }
 export interface SessionRow {
   id: string; projectID: string; cost: number; tokens: Record<string, number>;
@@ -9,13 +9,25 @@ export interface SessionRow {
   /** Null until an agent is switched to the session. */
   agent: string | null;
 }
-export interface MessageRow { id: string; sessionID: string; time: { created: number }; type: string; payload: { text: string }; delivery: string }
+export interface MessageRow { id: string; sessionID: string; time: { created: number }; type: string; [field: string]: unknown }
 export interface Recorded { method: string; path: string; directory?: string; authorization?: string; body: unknown }
+export interface PermissionRow { id: string; sessionID: string; action: string; resources: string[] }
+/** What the model answered, as a test states it. */
+export interface Answer {
+  text?: string;
+  reasoning?: string;
+  tools?: Array<{ name: string; status?: string; input?: unknown; output?: string; error?: string }>;
+  agent?: string;
+  error?: string;
+  /** Whether the Git state differed between the start and the end of the step. */
+  changed?: boolean;
+}
 
 export interface MockOpenCode {
   origin: string;
   requests: Recorded[];
   sessions: Map<string, SessionRow>;
+  /** The entries of each session's message list, oldest first as the server stores them. */
   messages: Map<string, MessageRow[]>;
   running: Set<string>;
   /** Where a new session is bound when set. Left out, a session is bound to the directory the request named. */
@@ -43,10 +55,20 @@ export interface MockOpenCode {
   missingDirectories: Set<string>;
   /** When set, the agent answers name this directory instead of the one that was asked. */
   agentLocation: string | null;
-  /** `malformed`: an agent is answered without its rules. `another`: another agent is answered under the name asked for. */
+  /** When `malformed`, an agent is answered without its rules. `another`: another agent is answered under the name asked for. */
   agentShape: 'ok' | 'malformed' | 'another';
   /** When true, the switch of an agent is answered and does nothing, as a server that lost it would. */
   agentSwitchIgnored: boolean;
+  /** The requests of a session's agent that wait for an answer, by request id. */
+  permissions: Map<string, PermissionRow>;
+  /** When `malformed`, a message list answers an entry that is not a message. */
+  messageShape: 'ok' | 'malformed';
+  /** Adds what the model answered, as an assistant message with its parts. */
+  answer(sessionID: string, answer?: Answer): void;
+  /** Notes how a run ended, as an `idle` message. */
+  idle(sessionID: string, outcome: string): void;
+  /** Makes the agent of the session ask to be allowed something, and emits `permission.asked`. */
+  ask(sessionID: string, action: string, resources: string[]): PermissionRow;
   emit: (event: Record<string, unknown>) => void;
   close: () => Promise<void>;
 }

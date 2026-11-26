@@ -11,6 +11,7 @@ import { REAL_READONLY_RULES, shown } from './rules.ts';
 function agentsOf(content: string): OpenCodeAgent[] {
   return [...BUILTIN_AGENTS, ...agentsOfConfigContent(content)].map(agent => ({
     ...agent,
+    description: agent.description ?? '',
     permissions: agent.permissions.map(rule => ({ ...rule, effect: rule.effect as AgentPermission['effect'] })),
   }));
 }

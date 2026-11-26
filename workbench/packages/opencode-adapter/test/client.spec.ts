@@ -329,3 +329,115 @@ test('the read-only agent comes back with the rules the server computed, and is 
       ['GET /api/agent/workbench-readonly', 'GET /api/agent', 'GET /api/agent/workbench-readonly']);
   } finally { await server.close(); }
 });
+
+test('a conversation is read as the server stores it, and from its beginning', async () => {
+  const { server, adapter } = await fixture();
+  try {
+    const session = await adapter().createSession({ title: 'talk' });
+    await adapter().sendPrompt(session.id, { text: 'What is here?' });
+    server.answer(session.id, {
+      reasoning: 'Look first.', text: 'A README.',
+      tools: [{ name: 'read', input: { path: 'README.md' }, output: 'first line' }], agent: 'workbench-readonly',
+    });
+    server.idle(session.id, 'succeeded');
+    await adapter().setSessionAgent(session.id, 'plan');
+    server.ask(session.id, 'read', ['.env']);
+    server.answer(session.id, {
+      tools: [{ name: 'read', input: { path: '.env' }, status: 'error', error: 'Rejected by user' }], error: 'The tool was rejected',
+    });
+    await adapter().abort(session.id);
+
+    // The server lists the newest first. A conversation is read from its beginning.
+    const messages = await adapter().getMessages(session.id);
+    assert.deepEqual(messages.map(message => message.type), ['user', 'assistant', 'idle', 'agent-switched', 'assistant', 'idle']);
+    const [user, answer, idle, switched, refused, ended] = messages;
+    assert.deepEqual([user.text, user.sessionID, user.parts, user.agent], ['What is here?', session.id, [], null]);
+    const call = answer.parts[2] as Extract<typeof answer.parts[number], { type: 'tool' }>;
+    assert.deepEqual(answer.parts.slice(0, 2), [{ type: 'reasoning', text: 'Look first.' }, { type: 'text', text: 'A README.' }]);
+    assert.deepEqual([call.name, call.status, call.input, call.output, call.error], ['read', 'completed', '{"path":"README.md"}', 'first line', null]);
+    assert.match(call.id, /^tool_/);
+    assert.deepEqual([answer.text, answer.agent, answer.model, answer.changed, answer.outcome, answer.error],
+      ['A README.', 'workbench-readonly', 'one/model', false, null, null]);
+    assert.deepEqual([idle.outcome, idle.text, switched.agent, switched.type], ['succeeded', '', 'plan', 'agent-switched']);
+    const denied = refused.parts[0] as Extract<typeof refused.parts[number], { type: 'tool' }>;
+    assert.deepEqual([refused.text, denied.status, denied.output, denied.error, refused.error, refused.changed],
+      ['', 'error', '', 'Rejected by user', 'The tool was rejected', false]);
+    assert.equal(ended.outcome, 'interrupted');
+
+    // Whether the Git state moved during a step is read from the snapshots the server keeps.
+    const other = await adapter().createSession({ title: 'edits' });
+    server.answer(other.id, { text: 'Done.', changed: true, tools: [{ name: 'read' }] });
+    const edited = (await adapter().getMessages(other.id))[0];
+    assert.deepEqual([edited.changed, edited.text, edited.agent], [true, 'Done.', 'build']);
+    assert.deepEqual((edited.parts[1] as { status: string; input: string; output: string }).status, 'completed');
+
+    // An entry that is not a message is not passed over as an empty conversation.
+    server.messageShape = 'malformed';
+    await assert.rejects(adapter().getMessages(other.id), (error: unknown) => kindOf(error) === 'protocol');
+  } finally { await server.close(); }
+});
+
+test('what the agent asks to be allowed is listed and answered, for this session only', async () => {
+  const { server, adapter } = await fixture();
+  try {
+    const session = await adapter().createSession({ title: 'ask' });
+    assert.deepEqual(await adapter().pendingPermissions(session.id), []);
+    const asked = server.ask(session.id, 'read', ['.env']);
+    const theirs = await adapter(TWO).createSession({ title: 'theirs' });
+    const theirAsk = server.ask(theirs.id, 'bash', ['ls']);
+    // Only what this session asks, and named with the session.
+    assert.deepEqual(await adapter().pendingPermissions(session.id), [{ id: asked.id, sessionID: session.id, action: 'read', resources: ['.env'] }]);
+    assert.deepEqual((await adapter(TWO).pendingPermissions(theirs.id)).map(one => one.id), [theirAsk.id]);
+    // A session of another project is not asked or answered through this one.
+    await assert.rejects(adapter().pendingPermissions(theirs.id), (error: unknown) => kindOf(error) === 'not_found');
+    await assert.rejects(adapter().replyPermission(theirs.id, theirAsk.id, 'reject'), (error: unknown) => kindOf(error) === 'not_found');
+
+    // What is not a decision, or not a request, is refused here, and nothing is sent.
+    const before = server.requests.length;
+    await assert.rejects(adapter().replyPermission(session.id, asked.id, 'perhaps' as 'allow'), (error: unknown) => kindOf(error) === 'invalid_request');
+    await assert.rejects(adapter().replyPermission(session.id, 'not an id', 'allow'), (error: unknown) => kindOf(error) === 'invalid_request');
+    assert.equal(server.requests.length, before, 'something was sent for a request that is not one');
+    // A request that is not there any more is not found.
+    await assert.rejects(adapter().replyPermission(session.id, 'per_nobody', 'reject'), (error: unknown) => kindOf(error) === 'not_found');
+
+    // Rejected: it waits no more, and the answer went to the reply route under `decision`.
+    await adapter().replyPermission(session.id, asked.id, 'reject');
+    const sent = server.requests.filter(request => request.path === `/api/session/${session.id}/permission/${asked.id}/reply`).at(-1);
+    assert.deepEqual([sent?.method, sent?.body], ['POST', { decision: 'reject' }]);
+    assert.deepEqual(await adapter().pendingPermissions(session.id), []);
+    const again = server.ask(session.id, 'write', ['a.txt']);
+    await adapter().replyPermission(session.id, again.id, 'allow');
+    assert.deepEqual(server.permissions.size, 1);
+  } finally { await server.close(); }
+});
+
+test('the events of one session come through alone', async () => {
+  const { server, adapter } = await fixture();
+  try {
+    const session = await adapter().createSession({ title: 'mine' });
+    const theirs = await adapter(TWO).createSession({ title: 'theirs' });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3_000);
+    const seen: string[] = [];
+    const reading = (async () => {
+      for await (const event of adapter().sessionEvents(session.id, controller.signal)) seen.push(event.type);
+    })();
+    try {
+      // Nothing is emitted before the server has the stream, or it would go nowhere.
+      for (let attempt = 0; attempt < 100 && !server.requests.some(request => request.path === '/api/event'); attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 20));
+      }
+      await new Promise(resolve => setTimeout(resolve, 50));
+      for (let attempt = 0; attempt < 100 && seen.length < 2; attempt++) {
+        server.emit({ type: 'server.something', data: {} });
+        server.emit({ type: 'session.execution.started', data: { sessionID: theirs.id } });
+        if (attempt === 0) {
+          server.emit({ type: 'session.execution.started', data: { sessionID: session.id } });
+          server.ask(session.id, 'read', ['.env']);
+        }
+        await new Promise(resolve => setTimeout(resolve, 30));
+      }
+    } finally { controller.abort(); await reading.catch(() => undefined); clearTimeout(timer); }
+    assert.deepEqual(seen, ['session.execution.started', 'permission.asked']);
+  } finally { await server.close(); }
+});

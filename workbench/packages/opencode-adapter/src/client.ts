@@ -28,13 +28,44 @@ export interface OpenCodeSession {
   agent: string | null;
 }
 
-/** One message of a session. A prompt is answered with the user's own message; the model's answer arrives later. */
+/** A part of an assistant message. A tool part is one call of a tool, with what went in and what came out. */
+export type OpenCodeMessagePart =
+  | { type: 'text'; text: string }
+  | { type: 'reasoning'; text: string }
+  | { type: 'tool'; id: string; name: string; status: string; input: string; output: string; error: string | null };
+
+/**
+ * One entry of a session's message list, as the real server gives it. A prompt is answered with the user's own
+ * message; the model's answer arrives later, as an assistant message.
+ */
 export interface OpenCodeMessage {
   id: string;
   sessionID: string;
+  /** `user`, `assistant`, `idle` (a run ended; see `outcome`) or `agent-switched` (see `agent`). */
   type: string;
-  text: string;
   created: number;
+  /** The user's text. Of an assistant message, its text parts joined. Empty for the others. */
+  text: string;
+  /** The parts of an assistant message, in order. Empty for the others. */
+  parts: OpenCodeMessagePart[];
+  /** The agent of an assistant or an agent-switched message. Null for the others. */
+  agent: string | null;
+  /** The model of an assistant message, as `provider/model`. Null for the others. */
+  model: string | null;
+  /** How a run ended, of an idle message. Null for the others. */
+  outcome: string | null;
+  /** An error the server stored with the message, if there is one. */
+  error: string | null;
+  /** The Git state differed between the start and the end of the step, as the server's snapshots say. */
+  changed: boolean;
+}
+
+/** A request of the agent that waits for an answer, as reading a `.env` file does. */
+export interface OpenCodePermission {
+  id: string;
+  sessionID: string;
+  action: string;
+  resources: string[];
 }
 
 /** One permission rule as the server reports it for an agent, in order. The last rule that matches wins. */
@@ -83,8 +114,14 @@ export interface OpenCodeAdapter {
   setSessionAgent(id: string, agent: string): Promise<OpenCodeSession>;
   /** Queues the text for the session and returns the user's message. The answer comes through the events. */
   sendPrompt(sessionID: string, input: PromptInput): Promise<OpenCodeMessage>;
-  /** The messages of the session, oldest first. */
+  /** The messages of the session, oldest first. The server's first page only, which holds the newest. */
   getMessages(sessionID: string): Promise<OpenCodeMessage[]>;
+  /** What the session's agent is waiting to be allowed to do. */
+  pendingPermissions(sessionID: string): Promise<OpenCodePermission[]>;
+  /** Answers one request of the session. `allow` gives the agent what it asked for; `reject` refuses it. */
+  replyPermission(sessionID: string, requestID: string, decision: 'allow' | 'reject'): Promise<void>;
+  /** The server's events about this session and nothing else, as they come. */
+  sessionEvents(sessionID: string, signal?: AbortSignal): AsyncIterable<ServerEvent>;
   /** The events of the project directory, as they come. Ends when `signal` is aborted or the stream closes. */
   subscribeEvents(signal?: AbortSignal): AsyncIterable<ServerEvent>;
   /** Asks the server to stop what it is doing in the session. */
@@ -196,7 +233,7 @@ export class OpenCodeHttpAdapter implements OpenCodeAdapter {
     if (!input || typeof input.text !== 'string' || !input.text.trim()) {
       throw new OpenCodeError('invalid_request', 'A prompt is text');
     }
-    const message = await this.request('POST', `/api/session/${sessionID}/prompt`, value => readMessage(value, sessionID), { text: input.text });
+    const message = await this.request('POST', `/api/session/${sessionID}/prompt`, value => readUserMessage(value, sessionID), { text: input.text });
     return mustBeMessage(message);
   }
 
@@ -236,13 +273,57 @@ export class OpenCodeHttpAdapter implements OpenCodeAdapter {
       if (!Array.isArray(value)) return null;
       const list: OpenCodeMessage[] = [];
       for (const item of value) {
-        const message = readMessage(item, sessionID);
+        // An entry that is not a message is not passed over: it may hold part of the conversation.
+        const message = readListedMessage(item, sessionID);
         if (!message) return null;
         list.push(message);
       }
-      return list.sort((left, right) => left.created - right.created);
+      // The server lists the newest first. A conversation is read from its beginning.
+      return list.reverse();
     });
-    return messages ?? [];
+    // A list with an entry that is not a message is not an empty conversation.
+    if (!messages) throw new OpenCodeError('protocol', 'The answer is not a message list');
+    return messages;
+  }
+
+  async pendingPermissions(sessionID: string): Promise<OpenCodePermission[]> {
+    assertSessionId(sessionID);
+    await this.owned(sessionID);
+    const pending = await this.request('GET', `/api/session/${sessionID}/permission`, value => {
+      if (!Array.isArray(value)) return null;
+      const list: OpenCodePermission[] = [];
+      for (const item of value) {
+        const permission = readPermission(item);
+        if (!permission || permission.sessionID !== sessionID) return null;
+        list.push(permission);
+      }
+      return list;
+    });
+    if (!pending) throw new OpenCodeError('protocol', 'The answer is not a list of permission requests');
+    return pending;
+  }
+
+  async replyPermission(sessionID: string, requestID: string, decision: 'allow' | 'reject'): Promise<void> {
+    assertSessionId(sessionID);
+    // What is not a request or a decision is refused before anything is asked of the server.
+    if (typeof requestID !== 'string' || !/^[\w-]{1,128}$/.test(requestID)) {
+      throw new OpenCodeError('invalid_request', 'A permission request is named by its id');
+    }
+    if (decision !== 'allow' && decision !== 'reject') {
+      throw new OpenCodeError('invalid_request', 'A permission request is allowed or rejected');
+    }
+    await this.owned(sessionID);
+    await this.request('POST', `/api/session/${sessionID}/permission/${requestID}/reply`, () => undefined, { decision });
+  }
+
+  async *sessionEvents(sessionID: string, signal?: AbortSignal): AsyncIterable<ServerEvent> {
+    assertSessionId(sessionID);
+    for await (const event of this.subscribeEvents(signal)) {
+      // Every event about a session names it. The others are about the server, or about another session.
+      if (event.data && typeof event.data === 'object' && (event.data as { sessionID?: unknown }).sessionID === sessionID) {
+        yield event;
+      }
+    }
   }
 
   async abort(sessionID: string): Promise<{ interrupted: boolean }> {
@@ -404,6 +485,7 @@ export class OpenCodeHttpAdapter implements OpenCodeAdapter {
     if (tag === 'UnauthorizedError') return new OpenCodeError('unauthorized', message || 'Unauthorized', status);
     if (tag === 'SessionNotFoundError') return new OpenCodeError('not_found', message || 'No such session', status);
     if (tag === 'AgentNotFoundError') return new OpenCodeError('not_found', message || 'No such agent', status);
+    if (tag === 'PermissionNotFoundError') return new OpenCodeError('not_found', message || 'No such permission request', status);
     // The directory a request named is not there any more.
     if (tag === 'LocationNotFoundError') {
       return new OpenCodeError('directory_unavailable', message || 'No such directory', status);
@@ -457,19 +539,96 @@ function readSession(value: unknown): OpenCodeSession | null {
   };
 }
 
-/** A message as the prompt request answers it (`payload.text`) and as the message list gives it (`text`). */
-function readMessage(value: unknown, sessionID: string): OpenCodeMessage | null {
+/** The user's own message, as the prompt route answers it: `{ id, sessionID, type: "user", payload: { text }, time } }`. */
+function readUserMessage(value: unknown, sessionID: string): OpenCodeMessage | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const row = value as Record<string, unknown>;
   const payload = row.payload as { text?: unknown } | undefined;
-  const text = typeof row.text === 'string' ? row.text : payload?.text;
   const created = (row.time as { created?: unknown } | undefined)?.created;
-  const owner = typeof row.sessionID === 'string' ? row.sessionID : sessionID;
-  if (typeof row.id !== 'string' || !row.id || typeof row.type !== 'string' || typeof text !== 'string' ||
+  if (typeof row.id !== 'string' || !row.id || row.type !== 'user' || typeof payload?.text !== 'string' ||
       !Number.isSafeInteger(created)) {
     return null;
   }
-  return { id: row.id, sessionID: owner, type: row.type, text, created: created as number };
+  const rest = { sessionID, parts: [], agent: null, model: null, outcome: null, error: null, changed: false };
+  return { ...rest, id: row.id, type: 'user', text: payload.text, created: created as number };
+}
+
+/**
+ * One entry of the message list, in the shapes read from the real server. A `user` entry has its `text`. An
+ * `assistant` entry has `agent`, `model`, `content` parts, a `snapshot` of the Git state and sometimes an `error`.
+ * An `idle` entry says how a run ended, and an `agent-switched` entry which agent the session runs from then on.
+ */
+function readListedMessage(value: unknown, sessionID: string): OpenCodeMessage | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  const created = (row.time as { created?: unknown } | undefined)?.created;
+  if (typeof row.id !== 'string' || !row.id || typeof row.type !== 'string' || !Number.isSafeInteger(created)) return null;
+  const message: OpenCodeMessage = {
+    id: row.id, sessionID, type: row.type, created: created as number, text: '', parts: [], agent: null, model: null,
+    outcome: null, error: null, changed: false,
+  };
+  const error = row.error;
+  message.error = typeof error === 'string' ? error
+    : error && typeof error === 'object' && typeof (error as { message?: unknown }).message === 'string'
+      ? (error as { message: string }).message : null;
+  if (row.type === 'user') {
+    if (typeof row.text !== 'string') return null;
+    message.text = row.text;
+    return message;
+  }
+  if (row.type === 'assistant') {
+    if (!Array.isArray(row.content)) return null;
+    for (const item of row.content) {
+      const part = readPart(item);
+      if (part) message.parts.push(part);
+    }
+    message.text = message.parts.filter(part => part.type === 'text').map(part => part.text).join('\n');
+    const model = row.model as { providerID?: unknown; id?: unknown } | undefined;
+    message.agent = typeof row.agent === 'string' ? row.agent : null;
+    message.model = typeof model?.providerID === 'string' && typeof model.id === 'string'
+      ? `${model.providerID}/${model.id}` : null;
+    const snapshot = row.snapshot as { start?: unknown; end?: unknown } | undefined;
+    message.changed = typeof snapshot?.start === 'string' && typeof snapshot.end === 'string' && snapshot.start !== snapshot.end;
+    return message;
+  }
+  if (row.type === 'idle') message.outcome = typeof row.outcome === 'string' ? row.outcome : null;
+  if (row.type === 'agent-switched') message.agent = typeof row.agent === 'string' ? row.agent : null;
+  // Any other type is passed on as what it is, with nothing read out of it.
+  return message;
+}
+
+/** A content part of an assistant message. A part of a type this adapter does not know is left out. */
+function readPart(value: unknown): OpenCodeMessagePart | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const part = value as Record<string, unknown>;
+  if (part.type === 'text' || part.type === 'reasoning') {
+    return typeof part.text === 'string' ? { type: part.type, text: part.text } : null;
+  }
+  if (part.type !== 'tool' || typeof part.id !== 'string' || typeof part.name !== 'string') return null;
+  const state = (part.state ?? {}) as Record<string, unknown>;
+  const content = Array.isArray(state.content) ? state.content : [];
+  const failure = state.error;
+  return {
+    type: 'tool', id: part.id, name: part.name,
+    status: typeof state.status === 'string' ? state.status : 'pending',
+    input: JSON.stringify(state.input ?? null),
+    output: content.map(item => (item as { text?: unknown })?.text).filter(text => typeof text === 'string').join('\n'),
+    error: typeof failure === 'string' ? failure : null,
+  };
+}
+
+/** A request that waits for an answer, as `GET /api/session/:id/permission` lists it. */
+function readPermission(value: unknown): OpenCodePermission | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  if (typeof row.id !== 'string' || !row.id || typeof row.sessionID !== 'string' || typeof row.action !== 'string' ||
+      !Array.isArray(row.resources)) {
+    return null;
+  }
+  return {
+    id: row.id, sessionID: row.sessionID, action: row.action,
+    resources: row.resources.filter(resource => typeof resource === 'string'),
+  };
 }
 
 function mustBeSession(session: OpenCodeSession | null): OpenCodeSession {

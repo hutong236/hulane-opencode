@@ -5,8 +5,8 @@ import { READONLY_AGENT_ID, managedConfigContent, readOnlyProblems, resolvePermi
 
 export { OpenCodeHttpAdapter, VERIFIED_VERSION };
 export type {
-  AgentPermission, OpenCodeAdapter, OpenCodeAgent, OpenCodeClientOptions, OpenCodeMessage, OpenCodeServerInfo,
-  OpenCodeSession, PromptInput,
+  AgentPermission, OpenCodeAdapter, OpenCodeAgent, OpenCodeClientOptions, OpenCodeMessage, OpenCodeMessagePart,
+  OpenCodePermission, OpenCodeServerInfo, OpenCodeSession, PromptInput,
 } from './client.js';
 export { OpenCodeError } from './errors.js';
 export type { OpenCodeErrorKind } from './errors.js';

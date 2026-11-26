@@ -113,12 +113,52 @@ export async function startMockOpenCode(options = {}) {
     missingDirectories: new Set(),
     /** When set, the agent answers name this directory instead of the one that was asked. */
     agentLocation: null,
-    /** When true, an agent is answered without its rules: not an agent as this adapter understands one. */
+    /** When `malformed`, an agent is answered without its rules. `another`: another agent is answered under the name asked for. */
     agentShape: 'ok',
     /** When true, the switch of an agent is answered and does nothing, as a server that lost it would. */
     agentSwitchIgnored: false,
+    /** The requests of a session's agent that wait for an answer, by request id. */
+    permissions: new Map(),
+    /** When `malformed`, a message list answers an entry that is not a message. */
+    messageShape: 'ok',
     emit: () => undefined,
     close: async () => undefined,
+  };
+  const now = () => ({ created: Date.now() });
+  /** Adds an entry to a session's message list, in the shapes the real server stores them. */
+  const entry = (sessionID, row) => {
+    state.messages.get(sessionID)?.push({ id: id('msg'), sessionID, time: now(), ...row });
+  };
+  /** What the model answered, for a test that has no model: text, reasoning, and calls of tools. */
+  state.answer = (sessionID, answer = {}) => {
+    const content = [];
+    if (answer.reasoning) content.push({ type: 'reasoning', text: answer.reasoning });
+    if (answer.text) content.push({ type: 'text', text: answer.text });
+    for (const call of answer.tools ?? []) {
+      content.push({
+        type: 'tool', id: id('tool'), name: call.name, executed: true,
+        state: {
+          status: call.status ?? 'completed', input: call.input ?? {},
+          content: call.output === undefined ? [] : [{ type: 'text', text: call.output }],
+          ...(call.error ? { error: call.error } : {}),
+        },
+      });
+    }
+    entry(sessionID, {
+      type: 'assistant', agent: answer.agent ?? 'build', model: { providerID: 'one', id: 'model' }, content,
+      snapshot: { start: 'a'.repeat(40), end: (answer.changed ? 'b' : 'a').repeat(40), files: [] },
+      ...(answer.error ? { error: { name: 'Error', message: answer.error } } : {}),
+    });
+  };
+  /** How a run ended, as the server notes it after the last message of a run. */
+  state.idle = (sessionID, outcome) => entry(sessionID, { type: 'idle', outcome });
+  /** The agent of the session asks to be allowed something before it goes on. */
+  state.ask = (sessionID, action, resources) => {
+    const permission = { id: id('per'), sessionID, action, resources };
+    state.permissions.set(permission.id, permission);
+    state.running.add(sessionID);
+    state.emit({ id: id('evt'), type: 'permission.asked', data: permission });
+    return permission;
   };
   const json = (response, ownStatus, body) => {
     const status = state.statusOverride ?? ownStatus;
@@ -180,11 +220,11 @@ export async function startMockOpenCode(options = {}) {
           _tag: 'LocationNotFoundError', location: { directory }, message: `Location not found: ${directory}`,
         });
       }
-      const location = { directory: state.agentLocation ?? directory };
       // The server loads the agents of a directory when the directory is first listed. Until then, an agent looked up
       // by name is not found, however long the server has been running.
       const loaded = state.agentDirectories.has(directory);
       state.agentDirectories.add(directory);
+      const location = { directory: state.agentLocation ?? directory };
       if (path === '/api/agent') {
         const data = !loaded && state.agentFirstListEmpty ? [] : [...state.agents.values()];
         return json(response, 200, { location, data: shaped(data, state.agentShape) });
@@ -207,18 +247,40 @@ export async function startMockOpenCode(options = {}) {
       return json(response, 200, { data: [...state.sessions.values()].reverse(), cursor: { previous: 'ses_older', next: null } });
     }
     if (path === '/api/session' && method === 'POST') {
-      const now = Date.now();
+      const created = Date.now();
       const session = {
         id: id('ses'), projectID: 'prj_mock', cost: 0, tokens: { input: 0, output: 0 },
-        time: { created: now, updated: now }, title: String(body?.title ?? ''),
+        time: { created, updated: created }, title: String(body?.title ?? ''),
         location: { directory: state.bindTo ?? request.headers['x-opencode-directory'] ?? '' },
         // The agent of the session is null until one is switched to it: the default agent, `build`, runs then.
         agent: null,
       };
       state.sessions.set(session.id, session);
       state.messages.set(session.id, []);
-      state.emit({ id: id('evt'), type: 'session.created', data: {}, location: { directory: session.location.directory } });
+      state.emit({ id: id('evt'), type: 'session.created', data: { sessionID: session.id }, location: { directory: session.location.directory } });
       return json(response, 200, { data: session });
+    }
+    const permission = /^\/api\/session\/([^/]+)\/permission(?:\/([^/]+)\/reply)?$/.exec(path);
+    if (permission) {
+      const [, sessionID, requestID] = permission;
+      if (!state.sessions.has(sessionID)) {
+        return json(response, 404, { _tag: 'SessionNotFoundError', sessionID, message: 'Session not found' });
+      }
+      const waiting = [...state.permissions.values()].filter((one) => one.sessionID === sessionID);
+      if (!requestID && method === 'GET') return json(response, 200, { data: waiting });
+      if (requestID && method === 'POST') {
+        if (!['allow', 'reject'].includes(body?.decision)) {
+          return json(response, 400, { _tag: 'InvalidRequestError', message: 'Expected Permission.Reply\n  at ["decision"]', kind: 'Payload' });
+        }
+        if (!waiting.some((one) => one.id === requestID)) {
+          return json(response, 404, { _tag: 'PermissionNotFoundError', requestID, message: `Permission request not found: ${requestID}` });
+        }
+        state.permissions.delete(requestID);
+        state.emit({ id: id('evt'), type: 'permission.replied', data: { sessionID, requestID, decision: body.decision } });
+        response.writeHead(204);
+        response.end();
+        return;
+      }
     }
     const match = /^\/api\/session\/([^/]+)(?:\/(prompt|message|interrupt|agent))?$/.exec(path);
     if (match) {
@@ -230,10 +292,10 @@ export async function startMockOpenCode(options = {}) {
       if (!session) return json(response, 404, { _tag: 'SessionNotFoundError', sessionID, message: 'Session not found' });
       if (!action && method === 'GET') return json(response, 200, { data: session });
       if (action === 'message' && method === 'GET') {
-        return json(response, 200, {
-          data: (state.messages.get(sessionID) ?? []).map((message) => ({ id: message.id, time: message.time, text: message.payload.text, type: message.type })),
-          cursor: { previous: null, next: null },
-        });
+        // The newest first. An entry does not name its session: it is read under the session.
+        if (state.messageShape === 'malformed') return json(response, 200, { data: [{ id: 'msg_x', type: 'assistant' }] });
+        const listed = (state.messages.get(sessionID) ?? []).map(({ sessionID: owner, delivery, ...rest }) => rest).reverse();
+        return json(response, 200, { data: listed, cursor: { previous: null, next: null } });
       }
       if (action === 'prompt' && method === 'POST') {
         if (typeof body?.text !== 'string') {
@@ -243,8 +305,9 @@ export async function startMockOpenCode(options = {}) {
           id: id('msg'), sessionID, time: { created: Date.now() }, type: 'user',
           payload: { text: body.text }, delivery: 'steer',
         };
-        state.messages.get(sessionID)?.push(message);
+        state.messages.get(sessionID)?.push({ ...message, text: body.text });
         state.running.add(sessionID);
+        state.emit({ id: id('evt'), type: 'session.inbox.enqueued', data: { sessionID, inboxID: message.id } });
         return json(response, 200, { data: message });
       }
       if (action === 'agent' && method === 'POST') {
@@ -253,15 +316,19 @@ export async function startMockOpenCode(options = {}) {
           return json(response, 400, { _tag: 'InvalidRequestError', message: 'Missing key\n  at ["agent"]', kind: 'Payload' });
         }
         if (!state.agentSwitchIgnored) {
+          entry(sessionID, { type: 'agent-switched', agent: body.agent, ...(session.agent ? { previous: session.agent } : {}) });
           session.agent = body.agent;
           session.time.updated = Date.now();
+          state.emit({ id: id('evt'), type: 'session.agent.selected', data: { sessionID, agent: body.agent } });
         }
         response.writeHead(204);
         response.end();
         return;
       }
       if (action === 'interrupt' && method === 'POST') {
-        return json(response, 200, { interrupted: state.running.delete(sessionID) });
+        const interrupted = state.running.delete(sessionID);
+        if (interrupted) entry(sessionID, { type: 'idle', outcome: 'interrupted' });
+        return json(response, 200, { interrupted });
       }
       if (!action && method === 'DELETE') {
         state.sessions.delete(sessionID);
