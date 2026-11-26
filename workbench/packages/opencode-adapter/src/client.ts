@@ -21,6 +21,11 @@ export interface OpenCodeSession {
   projectID: string;
   created: number;
   updated: number;
+  /**
+   * The agent the session runs, once one was switched to. Null until then: the server's default agent, `build`, is
+   * used, and that one may edit files and run commands.
+   */
+  agent: string | null;
 }
 
 /** One message of a session. A prompt is answered with the user's own message; the model's answer arrives later. */
@@ -51,12 +56,12 @@ export interface OpenCodeAgent {
   permissions: AgentPermission[];
 }
 
+/**
+ * A text for the session. The agent that runs it is the session's, switched with `setSessionAgent`: the `agent` and
+ * `model` fields this route also accepts were read to do nothing on the real server.
+ */
 export interface PromptInput {
   text: string;
-  /** The agent to run, by name. Left out, the server picks its default agent. */
-  agent?: string;
-  /** The model to run. Left out, the server picks the one configured for the project. */
-  model?: { providerID: string; modelID: string };
 }
 
 /**
@@ -69,6 +74,13 @@ export interface OpenCodeAdapter {
   createSession(input: { title: string }): Promise<OpenCodeSession>;
   /** The session, or null when there is none or it belongs to another project. */
   getSession(id: string): Promise<OpenCodeSession | null>;
+  /** The sessions of this project, in the order the server lists them, which is the newest first. */
+  listSessions(): Promise<OpenCodeSession[]>;
+  /**
+   * Switches the agent the session runs, and gives the session out only when it says it runs that agent now. The
+   * route takes any name: one that is not there is found out only when a task is run, which then fails.
+   */
+  setSessionAgent(id: string, agent: string): Promise<OpenCodeSession>;
   /** Queues the text for the session and returns the user's message. The answer comes through the events. */
   sendPrompt(sessionID: string, input: PromptInput): Promise<OpenCodeMessage>;
   /** The messages of the session, oldest first. */
@@ -184,20 +196,37 @@ export class OpenCodeHttpAdapter implements OpenCodeAdapter {
     if (!input || typeof input.text !== 'string' || !input.text.trim()) {
       throw new OpenCodeError('invalid_request', 'A prompt is text');
     }
-    const body: Record<string, unknown> = { text: input.text };
-    if (input.agent !== undefined) {
-      if (!/^[\w:-]{1,64}$/.test(input.agent)) throw new OpenCodeError('invalid_request', 'The agent is named by its name');
-      body.agent = input.agent;
-    }
-    if (input.model !== undefined) {
-      const { providerID, modelID } = input.model;
-      if (typeof providerID !== 'string' || !providerID || typeof modelID !== 'string' || !modelID) {
-        throw new OpenCodeError('invalid_request', 'A model is a provider and a model name');
-      }
-      body.model = { providerID, modelID };
-    }
-    const message = await this.request('POST', `/api/session/${sessionID}/prompt`, value => readMessage(value, sessionID), body);
+    const message = await this.request('POST', `/api/session/${sessionID}/prompt`, value => readMessage(value, sessionID), { text: input.text });
     return mustBeMessage(message);
+  }
+
+  /** The sessions of this project. The server lists the sessions of every directory together. */
+  async listSessions(): Promise<OpenCodeSession[]> {
+    const sessions = await this.request('GET', '/api/session', value => {
+      if (!Array.isArray(value)) return null;
+      const list: OpenCodeSession[] = [];
+      for (const item of value) {
+        // An entry that is not a session is not passed over: it may be one of this project's.
+        const session = mustBeSession(readSession(item));
+        if (session.directory === this.directory) list.push(session);
+      }
+      return list;
+    });
+    return sessions ?? [];
+  }
+
+  async setSessionAgent(sessionID: string, agent: string): Promise<OpenCodeSession> {
+    assertSessionId(sessionID);
+    await this.owned(sessionID);
+    if (typeof agent !== 'string' || !/^[\w:-]{1,64}$/.test(agent)) {
+      throw new OpenCodeError('invalid_request', 'An agent is named by its name');
+    }
+    await this.request('POST', `/api/session/${sessionID}/agent`, () => undefined, { agent });
+    const session = await this.getSession(sessionID);
+    if (!session || session.agent !== agent) {
+      throw new OpenCodeError('refused', `The session was not switched to the agent "${agent}"`);
+    }
+    return session;
   }
 
   async getMessages(sessionID: string): Promise<OpenCodeMessage[]> {
@@ -424,6 +453,7 @@ function readSession(value: unknown): OpenCodeSession | null {
   return {
     id: row.id, title: row.title, directory: location.directory, projectID: row.projectID,
     created: created as number, updated: updated as number,
+    agent: typeof row.agent === 'string' ? row.agent : null,
   };
 }
 

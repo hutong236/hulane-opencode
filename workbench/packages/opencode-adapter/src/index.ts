@@ -1,6 +1,6 @@
 import { OpenCodeHttpAdapter, VERIFIED_VERSION, type OpenCodeServerInfo } from './client.js';
 import { OpenCodeError } from './errors.js';
-import { describeProcess, RunningOpenCodeServer, connectOpenCode, ServerStartError } from './managed-server.js';
+import { describeProcess, endLeftoverServer, RunningOpenCodeServer, connectOpenCode, ServerStartError } from './managed-server.js';
 import { READONLY_AGENT_ID, managedConfigContent, readOnlyProblems, resolvePermission } from './readonly-agent.js';
 
 export { OpenCodeHttpAdapter, VERIFIED_VERSION };
@@ -16,7 +16,7 @@ export type { ServerEvent } from './sse.js';
 /** Starts an OpenCode server for one project and checks it before it is given out. */
 export const startManagedOpenCode = (options: StartOptions): Promise<RunningOpenCodeServer> =>
   RunningOpenCodeServer.start(options);
-export { RunningOpenCodeServer, ServerStartError, connectOpenCode, describeProcess };
+export { RunningOpenCodeServer, ServerStartError, connectOpenCode, describeProcess, endLeftoverServer };
 export type {
   ConnectOptions, ConnectedServer, ExitFacts, ManagedServerOptions, ProcessIdentity, ServerState,
 } from './managed-server.js';

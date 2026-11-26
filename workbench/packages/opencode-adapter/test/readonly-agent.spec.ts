@@ -89,7 +89,7 @@ test('an agent is read-only only when its rules say so, rule by rule', () => {
   assert.deepEqual(readOnlyProblems(readonlyOf(managedConfigContent(undefined))), []);
 
   const build = agentsOf('{}').find(agent => agent.id === 'build');
-  assert.ok(build);
+  assert.ok(build, 'no build agent in the mock');
   const buildProblems = readOnlyProblems(build);
   for (const expected of ['it does not deny everything it was not given', 'edit is not denied', 'shell is not denied', 'it allows question']) {
     assert.ok(buildProblems.includes(expected), `${expected} is missing from ${buildProblems.join('; ')}`);
@@ -97,14 +97,14 @@ test('an agent is read-only only when its rules say so, rule by rule', () => {
 
   // The built-in `plan` agent calls itself read-only. It denies `edit`, for one directory, and leaves `shell` allowed.
   const plan = agentsOf('{}').find(agent => agent.id === 'plan');
-  assert.ok(plan);
+  assert.ok(plan, 'no plan agent in the mock');
   const planProblems = readOnlyProblems(plan);
   assert.ok(planProblems.includes('shell is not denied'), planProblems.join('; '));
   assert.ok(planProblems.includes('it allows edit'), planProblems.join('; '));
 
   // Under `agents` the server lists the agent without applying its rules.
   const unapplied = agentsOf(JSON.stringify({ agents: { [READONLY_AGENT_ID]: { permission: { '*': 'deny' } } } }))[0];
-  assert.ok(readOnlyProblems(unapplied).includes('edit is not denied'));
+  assert.ok(readOnlyProblems(unapplied).includes('edit is not denied'), 'an agent under `agents` is not reported as allowing edit');
 
   // A flat `read: "allow"` comes after the server's "ask first" for `.env`, and so undoes it.
   const flat = agentWith({ '*': 'deny', read: 'allow', glob: 'allow', list: 'allow' });
@@ -123,7 +123,7 @@ test('an agent is read-only only when its rules say so, rule by rule', () => {
   // An allow for an action nobody knows opens that action.
   const withMcp = readonlyOf(managedConfigContent(undefined));
   withMcp.permissions.push({ action: 'mcp', resource: '*', effect: 'allow' });
-  assert.ok(readOnlyProblems(withMcp).includes('it allows mcp'));
+  assert.ok(readOnlyProblems(withMcp).includes('it allows mcp'), 'an allow for an action nobody knows is not reported');
   // The same problem is said once, however many ways it is found.
   assert.equal(new Set(readOnlyProblems(build)).size, readOnlyProblems(build).length);
 });

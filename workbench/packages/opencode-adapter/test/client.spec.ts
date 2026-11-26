@@ -93,7 +93,7 @@ test('a session of another project is not found, asked, read or stopped through 
     }
     // Each call looks the session up first and stops there: nothing is ever written to the other session.
     const theirsFromOurs = server.requests.filter(request => request.path.includes(theirs.id) && request.directory === ONE);
-    assert.ok(theirsFromOurs.length >= 3);
+    assert.ok(theirsFromOurs.length >= 3, 'the other project was not asked three times');
     assert.deepEqual([...new Set(theirsFromOurs.map(request => request.method))], ['GET']);
   } finally { await server.close(); }
 });
@@ -102,24 +102,70 @@ test('a prompt is queued as the user\'s message and the messages are listed olde
   const { server, adapter } = await fixture();
   try {
     const session = await adapter().createSession({ title: 'question' });
-    const sent = await adapter().sendPrompt(session.id, { text: 'What is here?', agent: 'Explore', model: { providerID: 'p', modelID: 'm' } });
+    const sent = await adapter().sendPrompt(session.id, { text: 'What is here?' });
     assert.equal(sent.type, 'user');
     assert.equal(sent.text, 'What is here?');
     assert.equal(sent.sessionID, session.id);
     const request = server.requests.at(-1)!;
     assert.equal(request.path, `/api/session/${session.id}/prompt`);
-    assert.deepEqual(request.body, { text: 'What is here?', agent: 'Explore', model: { providerID: 'p', modelID: 'm' } });
+    // The text and nothing else: the agent that runs a prompt is the session's, not a field of the prompt.
+    assert.deepEqual(request.body, { text: 'What is here?' });
     await new Promise(resolve => setTimeout(resolve, 3));
     await adapter().sendPrompt(session.id, { text: 'And there?' });
     const messages = await adapter().getMessages(session.id);
     assert.deepEqual(messages.map(message => [message.type, message.text]), [['user', 'What is here?'], ['user', 'And there?']]);
-    assert.ok(messages.every(message => message.sessionID === session.id && message.id.startsWith('msg_')));
+    assert.ok(messages.every(message => message.sessionID === session.id && message.id.startsWith('msg_')), 'a message of another session, or not a message, was listed');
     assert.deepEqual((await adapter().getMessages((await adapter().createSession({ title: 'empty' })).id)), []);
     // A prompt that is not text is refused here; a session id that is not one never becomes a path.
     await assert.rejects(adapter().sendPrompt(session.id, { text: '   ' }), (error: unknown) => kindOf(error) === 'invalid_request');
     await assert.rejects(adapter().sendPrompt('../event', { text: 'x' }), (error: unknown) => kindOf(error) === 'invalid_request');
-    await assert.rejects(adapter().sendPrompt(session.id, { text: 'x', agent: 'bad agent/../' }), (error: unknown) => kindOf(error) === 'invalid_request');
     assert.equal(server.requests.some(request => request.path.includes('/event') && request.method === 'POST'), false);
+  } finally { await server.close(); }
+});
+
+test('the agent a session runs is switched, and the session is given out only when it says it runs that agent', async () => {
+  const { server, adapter } = await fixture();
+  try {
+    const session = await adapter().createSession({ title: 'look around' });
+    // A new session has no agent of its own. The server's default agent runs then, and that one may edit and run commands.
+    assert.equal(session.agent, null, 'a new session has an agent of its own');
+    assert.equal((await adapter().setSessionAgent(session.id, 'plan')).agent, 'plan');
+    assert.equal((await adapter().getSession(session.id))?.agent, 'plan');
+    // The switch, and the reading back of the session after it.
+    const switchAt = server.requests.findIndex(request => request.path === `/api/session/${session.id}/agent`);
+    const switchRequest = server.requests[switchAt];
+    assert.deepEqual([switchRequest?.method, switchRequest?.body], ['POST', { agent: 'plan' }]);
+    assert.deepEqual([server.requests[switchAt + 1]?.method, server.requests[switchAt + 1]?.path],
+      ['GET', `/api/session/${session.id}`]);
+
+    // What is not a name is refused here, and a session of another project is not switched through this one.
+    await assert.rejects(adapter().setSessionAgent(session.id, 'bad agent/../'), (error: unknown) => kindOf(error) === 'invalid_request');
+    const theirs = await adapter(TWO).createSession({ title: 'theirs' });
+    await assert.rejects(adapter().setSessionAgent(theirs.id, 'plan'), (error: unknown) => kindOf(error) === 'not_found');
+
+    // A server that answers the switch and does not switch: the session is not given out as switched.
+    server.agentSwitchIgnored = true;
+    await assert.rejects(adapter().setSessionAgent(session.id, 'explore'), (error: unknown) => kindOf(error) === 'refused');
+    assert.equal((await adapter().getSession(session.id))?.agent, 'plan');
+
+    // The route takes any name. Whether that agent is there is for the next task to find out.
+    server.agentSwitchIgnored = false;
+    assert.equal((await adapter().setSessionAgent(session.id, 'nobody')).agent, 'nobody');
+  } finally { await server.close(); }
+});
+
+test('the sessions of the project are listed as the server lists them, and none of another project', async () => {
+  const { server, adapter } = await fixture();
+  try {
+    await adapter().createSession({ title: 'first' });
+    await adapter().createSession({ title: 'second' });
+    await adapter(TWO).createSession({ title: 'theirs' });
+    // The server lists the sessions of every directory together, the newest first.
+    assert.deepEqual((await adapter().listSessions()).map(session => session.title), ['second', 'first']);
+    assert.deepEqual((await adapter(TWO).listSessions()).map(session => session.title), ['theirs']);
+    // Apart from the three sessions that were created, nothing was asked for but a reading.
+    assert.deepEqual(server.requests.filter(request => request.method !== 'GET').map(request => request.path),
+      ['/api/session', '/api/session', '/api/session']);
   } finally { await server.close(); }
 });
 
@@ -150,7 +196,7 @@ test('the event stream yields the typed events of the server and nothing else, a
     await reading;
     const types = (events as { type: string }[]).map(event => event.type);
     assert.equal(types[0], 'server.connected');
-    assert.ok(types.includes('session.created'));
+    assert.ok(types.includes('session.created'), 'the session.created event did not come');
     assert.ok(types.includes('unparseable'), 'an event without a type is handed over as unreadable, not dropped silently');
     assert.equal(types.includes('heartbeat'), false);
     // An aborted stream ends without an error.
@@ -274,7 +320,7 @@ test('the read-only agent comes back with the rules the server computed, and is 
     const adapter = new OpenCodeHttpAdapter({ baseUrl: server.origin, directory: ONE });
     // By name alone it is not there yet: the list is what makes the server load the agents of a directory.
     assert.equal(await adapter.getAgent(READONLY_AGENT_ID), null);
-    assert.ok((await adapter.listAgents()).some(agent => agent.id === READONLY_AGENT_ID));
+    assert.ok((await adapter.listAgents()).some(agent => agent.id === READONLY_AGENT_ID), 'the read-only agent is not listed');
     const agent = await adapter.getAgent(READONLY_AGENT_ID);
     assert.equal(agent?.id, READONLY_AGENT_ID);
     assert.deepEqual(readOnlyProblems(agent!), []);

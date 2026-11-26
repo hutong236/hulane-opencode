@@ -6,6 +6,8 @@ export interface AgentRow {
 export interface SessionRow {
   id: string; projectID: string; cost: number; tokens: Record<string, number>;
   time: { created: number; updated: number }; title: string; location: { directory: string };
+  /** Null until an agent is switched to the session. */
+  agent: string | null;
 }
 export interface MessageRow { id: string; sessionID: string; time: { created: number }; type: string; payload: { text: string }; delivery: string }
 export interface Recorded { method: string; path: string; directory?: string; authorization?: string; body: unknown }
@@ -43,6 +45,8 @@ export interface MockOpenCode {
   agentLocation: string | null;
   /** `malformed`: an agent is answered without its rules. `another`: another agent is answered under the name asked for. */
   agentShape: 'ok' | 'malformed' | 'another';
+  /** When true, the switch of an agent is answered and does nothing, as a server that lost it would. */
+  agentSwitchIgnored: boolean;
   emit: (event: Record<string, unknown>) => void;
   close: () => Promise<void>;
 }

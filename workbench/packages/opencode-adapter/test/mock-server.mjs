@@ -115,6 +115,8 @@ export async function startMockOpenCode(options = {}) {
     agentLocation: null,
     /** When true, an agent is answered without its rules: not an agent as this adapter understands one. */
     agentShape: 'ok',
+    /** When true, the switch of an agent is answered and does nothing, as a server that lost it would. */
+    agentSwitchIgnored: false,
     emit: () => undefined,
     close: async () => undefined,
   };
@@ -201,8 +203,8 @@ export async function startMockOpenCode(options = {}) {
       return;
     }
     if (path === '/api/session' && method === 'GET') {
-      // The real server lists sessions of every directory together.
-      return json(response, 200, { data: [...state.sessions.values()], cursor: { previous: 'ses_older', next: null } });
+      // The real server lists sessions of every directory together, the newest first.
+      return json(response, 200, { data: [...state.sessions.values()].reverse(), cursor: { previous: 'ses_older', next: null } });
     }
     if (path === '/api/session' && method === 'POST') {
       const now = Date.now();
@@ -210,13 +212,15 @@ export async function startMockOpenCode(options = {}) {
         id: id('ses'), projectID: 'prj_mock', cost: 0, tokens: { input: 0, output: 0 },
         time: { created: now, updated: now }, title: String(body?.title ?? ''),
         location: { directory: state.bindTo ?? request.headers['x-opencode-directory'] ?? '' },
+        // The agent of the session is null until one is switched to it: the default agent, `build`, runs then.
+        agent: null,
       };
       state.sessions.set(session.id, session);
       state.messages.set(session.id, []);
       state.emit({ id: id('evt'), type: 'session.created', data: {}, location: { directory: session.location.directory } });
       return json(response, 200, { data: session });
     }
-    const match = /^\/api\/session\/([^/]+)(?:\/(prompt|message|interrupt))?$/.exec(path);
+    const match = /^\/api\/session\/([^/]+)(?:\/(prompt|message|interrupt|agent))?$/.exec(path);
     if (match) {
       const [, sessionID, action] = match;
       if (!SESSION.test(sessionID)) {
@@ -242,6 +246,19 @@ export async function startMockOpenCode(options = {}) {
         state.messages.get(sessionID)?.push(message);
         state.running.add(sessionID);
         return json(response, 200, { data: message });
+      }
+      if (action === 'agent' && method === 'POST') {
+        // The real route answers 204 for any name and sets it. Whether the agent is there is found out by the next task.
+        if (typeof body?.agent !== 'string') {
+          return json(response, 400, { _tag: 'InvalidRequestError', message: 'Missing key\n  at ["agent"]', kind: 'Payload' });
+        }
+        if (!state.agentSwitchIgnored) {
+          session.agent = body.agent;
+          session.time.updated = Date.now();
+        }
+        response.writeHead(204);
+        response.end();
+        return;
       }
       if (action === 'interrupt' && method === 'POST') {
         return json(response, 200, { interrupted: state.running.delete(sessionID) });

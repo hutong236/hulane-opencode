@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { test, type TestContext } from 'node:test';
 import {
   OpenCodeError, RunningOpenCodeServer, ServerStartError, VERIFIED_VERSION, connectOpenCode, describeProcess,
-  managedConfigContent, startManagedOpenCode,
+  endLeftoverServer, managedConfigContent, startManagedOpenCode,
   type ManagedServerOptions, type OpenCodeErrorKind,
 } from '../src/index.ts';
 import { startMockOpenCode } from './mock-server.mjs';
@@ -201,7 +201,7 @@ test('a server whose first listing is empty, or whose agent is still loading, is
   stopsWith(t, slow);
   assert.equal(await slow.check(), 'running');
   await slow.stop();
-  assert.ok(gone(slow.pid));
+  assert.ok(gone(slow.pid), 'the process is still there');
   // An agent that is not there yet is asked for again, for a moment.
   const late = await start(scratch(t), { FAKE_OPENCODE_AGENT: 'late' });
   stopsWith(t, late);
@@ -318,7 +318,45 @@ test('a process is told from another that gets its number later, where the syste
   assert.ok(self, 'ps says nothing about this process');
   assert.equal(self.parent, process.ppid);
   assert.match(self.started, /^\w{3} +(?:\w{3} +)?\d+ \d\d:\d\d:\d\d \d{4}$/);
-  assert.ok(self.command.length > 0);
+  assert.ok(self.command.length > 0, 'no command line was read');
   // Beyond the largest process number macOS or Linux gives out.
   assert.equal(await describeProcess(2_147_483_646), null);
 });
+
+test('a server left behind by a Workbench that is gone is ended only when the system says it is that process',
+  { timeout: 30_000 }, async (t) => {
+    const s = scratch(t);
+    // Started the way an earlier Workbench process would have left it: its parent gone, so it belongs to the system.
+    const launcher = spawn(process.execPath, [
+      '-e',
+      `const { spawn } = require('node:child_process'); spawn(process.execPath, [${JSON.stringify(FAKE[1])}, ...process.argv.slice(1)], { detached: true, stdio: 'ignore', env: process.env }).unref();`,
+      'serve', '--hostname', '127.0.0.1', '--port', '0',
+    ], { cwd: s.project, env: { ...process.env, FAKE_OPENCODE_RECEIPT: s.receipt, FAKE_OPENCODE_ORPHAN: '1' }, stdio: 'ignore' });
+    await new Promise<void>((resolve) => { launcher.once('exit', () => resolve()); });
+    let pid = 0;
+    for (let attempt = 0; attempt < 100 && pid === 0; attempt++) {
+      if (existsSync(s.receipt)) pid = receiptOf(s).pid;
+      else await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    assert.ok(pid > 0 && pid !== process.pid, 'the fake did not start');
+    t.after(() => { try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ } });
+
+    // It is not this process's child, and what was recorded of it is what the system says now.
+    const recorded = await describeProcess(pid);
+    assert.notEqual(recorded?.parent, process.pid);
+    assert.ok(recorded, 'the system says nothing about the leftover server');
+    // Another start time, or none: nothing is signalled.
+    assert.equal(await endLeftoverServer(pid, 'Thu Jan 1 00:00:00 1970'), false);
+    assert.equal(await endLeftoverServer(pid, null), false);
+    assert.equal(await endLeftoverServer(pid, recorded.started + ' '), false);
+    assert.equal(gone(pid), false, 'a process was signalled without being proved');
+    // This process itself, with its own start time: not a managed server.
+    assert.equal(await endLeftoverServer(process.pid, (await describeProcess(process.pid))?.started ?? ''), false);
+    assert.equal(await endLeftoverServer(0, recorded.started), false);
+    assert.equal(await endLeftoverServer(-1, recorded.started), false);
+
+    // With what was recorded of it, it is ended, and it stays ended.
+    assert.equal(await endLeftoverServer(pid, recorded.started), true);
+    assert.ok(gone(pid), `process ${pid} is still there`);
+    assert.equal(await endLeftoverServer(pid, recorded.started), false);
+  });

@@ -32,7 +32,7 @@ export async function describeProcess(pid: number): Promise<ProcessIdentity | nu
   let stdout: string;
   try {
     ({ stdout } = await run('ps', ['-o', 'ppid=,lstart=,command=', '-p', String(pid)], {
-      encoding: 'utf8', timeout: 5_000, env: { ...process.env, LC_ALL: 'C' },
+      encoding: 'utf8', timeout: 5_000, env: { ...process.env, LC_ALL: 'C', TZ: 'UTC' },
     }));
   } catch { return null; }
   const tokens = stdout.trim().split(/\s+/);
@@ -342,6 +342,42 @@ export class RunningOpenCodeServer {
 
 export const startManagedOpenCode = (options: ManagedServerOptions): Promise<RunningOpenCodeServer> =>
   RunningOpenCodeServer.start(options);
+
+/** How a managed server was started, at the end of its command line. */
+const SERVE_COMMAND = / serve --hostname (?:127\.0\.0\.1|\[::1\]) --port 0$/;
+
+/**
+ * Ends a server that an earlier Workbench process started and left behind, once the system says that this is it: the
+ * same process number, started at the same time, with the command line of a managed server. False when that cannot
+ * be said, and then nothing is signalled. A process number alone is not proof: it may belong to another process now.
+ */
+export async function endLeftoverServer(pid: number, started: string | null, timeoutMs = 5_000): Promise<boolean> {
+  if (!Number.isSafeInteger(pid) || pid <= 1 || !started) return false;
+  const now = await describeProcess(pid);
+  if (!now || now.started !== started || !SERVE_COMMAND.test(now.command)) return false;
+  try {
+    process.kill(pid, 'SIGTERM');
+    if (await goneWithin(pid, timeoutMs)) return true;
+    process.kill(pid, 'SIGKILL');
+    return goneWithin(pid, timeoutMs);
+  } catch (error) {
+    // Already gone is the end that was wanted. Anything else, as a process of another user, is not ours to end.
+    return (error as NodeJS.ErrnoException).code === 'ESRCH';
+  }
+}
+
+/** True when no process has that number any more, or when the time is up. */
+async function goneWithin(pid: number, timeoutMs: number): Promise<boolean> {
+  const until = Date.now() + timeoutMs;
+  while (true) {
+    try { process.kill(pid, 0); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ESRCH') return true;
+    }
+    if (Date.now() >= until) return false;
+    await sleep(100);
+  }
+}
 
 /**
  * Attaches to a server someone else started. Nothing is started and nothing is written: the address and the password
