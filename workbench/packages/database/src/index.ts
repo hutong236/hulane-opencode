@@ -19,3 +19,9 @@ export type {
 } from './requirement-diff.js';
 export { RequirementDiffRepository } from './requirement-diffs.js';
 export type { RequirementDiffRecord, StoredRequirementDiff } from './requirement-diffs.js';
+export { OpenCodeServerRepository, OPENCODE_SERVER_STATES } from './opencode-servers.js';
+export type {
+  NewOpenCodeServer, OpenCodeServerKind, OpenCodeServerRecord, OpenCodeServerState,
+} from './opencode-servers.js';
+export { OpenCodeSessionRepository } from './opencode-sessions.js';
+export type { OpenCodeSessionRecord, SeenSession } from './opencode-sessions.js';

@@ -13,3 +13,16 @@ try {
   app.log.error(error);
   process.exitCode = 1;
 }
+
+// A server the Workbench starts is this process's child. It is ended before the process goes, and one that an
+// earlier run left behind is looked for once. Neither failing keeps the Workbench from running.
+if (process.exitCode !== 1) {
+  await app.opencode.reconcile();
+  for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+    process.once(signal, () => {
+      const forced = setTimeout(() => process.exit(1), 10_000);
+      forced.unref();
+      app.close().then(() => process.exit(0), () => process.exit(1));
+    });
+  }
+}
