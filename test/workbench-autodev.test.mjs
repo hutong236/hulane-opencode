@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { ciVerdict, codeOf, dependencies, pages, rowsOf, selectWork, validateNoWeakening, validatePaths, weakenedScripts } from '../bin/workbench-autodev.mjs';
+import { ciVerdict, codeOf, dependencies, pages, rowsOf, selectWork, taskOfTitle, validateNoWeakening, validatePaths, weakenedScripts } from '../bin/workbench-autodev.mjs';
 const make=()=>Array.from({length:28},(_,i)=>({
   number:i+5,title:`[WB-${String(i+1).padStart(3,'0')}] Task`,state:'open',
   body:i?'## 前置依赖\n- WB-001\n\n## 验收条件\n- WB-028':'## 依赖\n- 无'
@@ -185,6 +185,15 @@ test('a task whose change has landed waits for acceptance instead of being imple
   // No merged pull request at all: unchanged behavior.
   assert.equal(selectWork(items, [], []).mode, 'new');
 
+  // The task may lead the title or close it; a title that names another task first delivers that one.
+  assert.match(selectWork(items, [], [], [{ ...landed, title: 'feat(workbench): rename, default branch and remote (WB-004)' }]).reason,
+    /WB-004: delivered in PR #65/);
+  assert.equal(selectWork(items, [], [], [{ ...landed, title: 'WB-007: impact rules on top of WB-004' }]).mode, 'new');
+  assert.equal(taskOfTitle(undefined), null);
+  // A longer number, or a code glued to a word, is not a task.
+  assert.equal(taskOfTitle('chore: WB-0040 cleanup'), null);
+  assert.equal(taskOfTitle('fix(AWB-004): read the title'), null);
+
   // An open pull request for the task still decides on its own, before the delivery check.
   const pr = { state: 'open', number: 65, title: 'WB-004: in progress', head: { ref: 'feat/WB-004-autodev', sha: 's1', repo: { full_name: 'hutong236/hulane-opencode' } } };
   const busy = selectWork(items, [pr], [run(1, 'Workbench CI', 'pull_request', 'completed', 'success')], [landed]);
@@ -192,14 +201,32 @@ test('a task whose change has landed waits for acceptance instead of being imple
   assert.match(busy.reason, /PR #65 awaiting review/);
 });
 
-test('a merged pull request that names the code anywhere counts as delivery of that task', () => {
+test('a merged pull request that only mentions a task does not deliver it', () => {
   const items = make();
   for (const item of items) item.state = 'closed';
-  items[5].state = 'open'; // WB-006
-  // The code in the body counts, exactly as it does when open pull requests are matched to a task. The direction of
-  // the error is deliberate: waiting for a person is safe, implementing a delivered task again is not.
-  const delivered = { number: 71, state: 'closed', merged_at: '2026-11-25T10:00:00Z', title: 'WB-004: done', body: 'Refers to WB-006 as an example' };
-  const choice = selectWork(items, [], [], [delivered]);
-  assert.equal(choice.mode, 'wait');
-  assert.match(choice.reason, /WB-006: delivered in PR #71/);
+  // What held WB-010 back on 2026-11-25: a fix of the selector quoted the task in its text.
+  const quote = {
+    number: 68, state: 'closed', merged_at: '2026-11-25T05:36:47Z',
+    title: 'fix(autodev): own log file, CI verdict by job, every dependency line',
+    body: 'WB-012 lists WB-002 (closed) and WB-010 (open) and read as ready.',
+  };
+  items[9].state = 'open'; // WB-010
+  assert.equal(taskOfTitle(quote.title), null);
+  assert.equal(selectWork(items, [], [], [quote]).id, 10);
+
+  // A title that spans several tasks is about none of them. Its first code is WB-001, which is closed.
+  const span = { number: 35, state: 'closed', merged_at: '2026-11-17T00:00:00Z', title: 'ci(workbench): 每 30 分钟自动推进 WB-001～WB-028', body: '' };
+  assert.equal(taskOfTitle(span.title), 1);
+  items[9].state = 'closed';
+  items[27].state = 'open'; // WB-028
+  assert.equal(selectWork(items, [], [], [span]).id, 28);
+
+  // A delivery of another task that says a later task will build on it is not that later task's delivery.
+  const delivery = {
+    number: 65, state: 'closed', merged_at: '2026-11-25T09:11:11Z', title: 'feat(workbench): WB-004 remaining scope',
+    body: 'The capability and dependency tags are reserved storage; WB-007 builds on it.',
+  };
+  items[27].state = 'closed';
+  items[6].state = 'open'; // WB-007
+  assert.equal(selectWork(items, [], [], [delivery]).id, 7);
 });

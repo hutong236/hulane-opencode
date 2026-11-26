@@ -445,3 +445,215 @@ export async function getRequirementVersion(id: string, version: number, signal?
   if (!UUID.test(id) || !Number.isSafeInteger(version) || version < 1) throw new ApiError('需求版本无效', 400);
   return requestJson(`/api/requirements/${id}/versions/${version}`, decodeVersion, signal);
 }
+
+/* ----------------------------- Requirement diffs ---------------------------- */
+
+export type DiffOp = 'added' | 'modified' | 'deleted' | 'needs_review';
+export type NeedsReviewReason =
+  | 'duplicate_id' | 'unkeyed_array_changed' | 'reordered' | 'possible_rename' | 'ambiguous_match';
+export interface RequirementDiffChange {
+  op: DiffOp;
+  pointer: string;
+  value?: unknown;
+  old_value?: unknown;
+  new_value?: unknown;
+  reason?: NeedsReviewReason;
+  related?: string[];
+}
+export interface RequirementDiffSummary {
+  added: number;
+  modified: number;
+  deleted: number;
+  needs_review: number;
+  unchanged: number;
+}
+export interface RequirementDiff {
+  schema: 1;
+  base_sha256: string;
+  target_sha256: string;
+  summary: RequirementDiffSummary;
+  changes: RequirementDiffChange[];
+  unchanged: string[];
+}
+/** A comparison without its changes, as a list of comparisons gives it. */
+export interface RequirementDiffRecord {
+  id: string;
+  requirement_id: string;
+  base_version: number;
+  target_version: number;
+  base_version_id: string;
+  target_version_id: string;
+  base_sha256: string;
+  target_sha256: string;
+  diff_sha256: string;
+  summary: RequirementDiffSummary;
+  created_at: string;
+}
+export interface StoredRequirementDiff extends RequirementDiffRecord {
+  diff: RequirementDiff;
+}
+
+export const DIFF_OPS: readonly DiffOp[] = ['added', 'modified', 'deleted', 'needs_review'];
+export const NEEDS_REVIEW_REASONS: readonly NeedsReviewReason[] = [
+  'duplicate_id', 'unkeyed_array_changed', 'reordered', 'possible_rename', 'ambiguous_match',
+];
+const SHA256 = /^[0-9a-f]{64}$/;
+const malformed = (): ApiError => new ApiError('API 返回的数据结构不正确');
+
+function decodeDiffSummary(value: unknown): RequirementDiffSummary {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw malformed();
+  const row = value as Record<string, unknown>;
+  for (const key of ['added', 'modified', 'deleted', 'needs_review', 'unchanged'] as const) {
+    if (!Number.isSafeInteger(row[key]) || (row[key] as number) < 0) throw malformed();
+  }
+  return {
+    added: row.added as number, modified: row.modified as number, deleted: row.deleted as number,
+    needs_review: row.needs_review as number, unchanged: row.unchanged as number,
+  };
+}
+
+function decodeDiffChange(value: unknown): RequirementDiffChange {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw malformed();
+  const row = value as Record<string, unknown>;
+  if (!DIFF_OPS.includes(row.op as DiffOp) || typeof row.pointer !== 'string') throw malformed();
+  const has = (key: string): boolean => Object.hasOwn(row, key);
+  if (row.op === 'added' && !has('value')) throw malformed();
+  if ((row.op === 'deleted' || row.op === 'modified') && !has('old_value')) throw malformed();
+  if (row.op === 'modified' && !has('new_value')) throw malformed();
+  if (row.op === 'needs_review') {
+    if (!NEEDS_REVIEW_REASONS.includes(row.reason as NeedsReviewReason) || !Array.isArray(row.related) ||
+        !row.related.every(pointer => typeof pointer === 'string')) {
+      throw malformed();
+    }
+  }
+  const change: RequirementDiffChange = { op: row.op as DiffOp, pointer: row.pointer };
+  if (has('value')) change.value = row.value;
+  if (has('old_value')) change.old_value = row.old_value;
+  if (has('new_value')) change.new_value = row.new_value;
+  if (row.op === 'needs_review') {
+    change.reason = row.reason as NeedsReviewReason;
+    change.related = row.related as string[];
+  }
+  return change;
+}
+
+/** The diff of one comparison. The summary has to agree with the entries, or the answer is refused as a whole. */
+function decodeDiff(value: unknown): RequirementDiff {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw malformed();
+  const row = value as Record<string, unknown>;
+  if (row.schema !== 1 || typeof row.base_sha256 !== 'string' || !SHA256.test(row.base_sha256) ||
+      typeof row.target_sha256 !== 'string' || !SHA256.test(row.target_sha256)) {
+    throw malformed();
+  }
+  const summary = decodeDiffSummary(row.summary);
+  if (!Array.isArray(row.changes) || !Array.isArray(row.unchanged) ||
+      !row.unchanged.every(pointer => typeof pointer === 'string')) {
+    throw malformed();
+  }
+  const changes = row.changes.map(decodeDiffChange);
+  const counted = { added: 0, modified: 0, deleted: 0, needs_review: 0, unchanged: row.unchanged.length };
+  for (const change of changes) counted[change.op] += 1;
+  for (const key of Object.keys(counted) as (keyof RequirementDiffSummary)[]) {
+    if (counted[key] !== summary[key]) throw malformed();
+  }
+  return {
+    schema: 1, base_sha256: row.base_sha256, target_sha256: row.target_sha256, summary, changes,
+    unchanged: row.unchanged as string[],
+  };
+}
+
+function decodeDiffRecord(value: unknown): RequirementDiffRecord {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw malformed();
+  const row = value as Record<string, unknown>;
+  if (typeof row.id !== 'string' || !UUID.test(row.id) || typeof row.requirement_id !== 'string' || !UUID.test(row.requirement_id)) {
+    throw malformed();
+  }
+  for (const field of ['base_version_id', 'target_version_id'] as const) {
+    if (typeof row[field] !== 'string' || !UUID.test(row[field])) throw malformed();
+  }
+  for (const field of ['base_version', 'target_version'] as const) {
+    if (!Number.isSafeInteger(row[field]) || (row[field] as number) < 1) throw malformed();
+  }
+  if ((row.base_version as number) === row.target_version) throw malformed();
+  for (const field of ['base_sha256', 'target_sha256', 'diff_sha256'] as const) {
+    if (typeof row[field] !== 'string' || !SHA256.test(row[field])) throw malformed();
+  }
+  if (typeof row.created_at !== 'string' || !row.created_at.trim()) throw malformed();
+  return {
+    id: row.id, requirement_id: row.requirement_id,
+    base_version: row.base_version as number, target_version: row.target_version as number,
+    base_version_id: row.base_version_id as string, target_version_id: row.target_version_id as string,
+    base_sha256: row.base_sha256 as string, target_sha256: row.target_sha256 as string,
+    diff_sha256: row.diff_sha256 as string, summary: decodeDiffSummary(row.summary), created_at: row.created_at,
+  };
+}
+
+function decodeStoredDiff(value: unknown): StoredRequirementDiff {
+  const record = decodeDiffRecord(value);
+  const diff = decodeDiff((value as Record<string, unknown>).diff);
+  // The diff names the two snapshots the record says were compared.
+  if (diff.base_sha256 !== record.base_sha256 || diff.target_sha256 !== record.target_sha256) throw malformed();
+  return { ...record, diff };
+}
+
+export async function getRequirementDiffs(id: string, signal?: AbortSignal): Promise<RequirementDiffRecord[]> {
+  if (!UUID.test(id)) throw new ApiError('需求 ID 无效', 400);
+  return requestJson(`/api/requirements/${id}/diffs`, value => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw malformed();
+    const data = value as Record<string, unknown>;
+    if (!Array.isArray(data.diffs)) throw malformed();
+    const ids = new Set<string>();
+    return data.diffs.map((item: unknown) => {
+      const record = decodeDiffRecord(item);
+      // A record of another requirement is not an answer to this question.
+      if (record.requirement_id !== id || ids.has(record.id)) throw malformed();
+      ids.add(record.id);
+      return record;
+    });
+  }, signal);
+}
+
+export async function getRequirementDiff(id: string, diffId: string, signal?: AbortSignal): Promise<StoredRequirementDiff> {
+  if (!UUID.test(id)) throw new ApiError('需求 ID 无效', 400);
+  if (!UUID.test(diffId)) throw new ApiError('差分 ID 无效', 400);
+  const stored = requestJson(`/api/requirements/${id}/diffs/${diffId}`, value => {
+    const record = decodeStoredDiff(value);
+    if (record.id !== diffId || record.requirement_id !== id) throw malformed();
+    return record;
+  }, signal);
+  return stored.catch(error => {
+    if (error instanceof ApiError && error.status === 404) throw new ApiError('这个差分不存在', 404);
+    throw error;
+  });
+}
+
+/** Compare two versions. The first comparison is stored; a later one for the same pair gives the stored result. */
+export async function compareRequirementVersions(
+  id: string, input: { baseVersion: number; targetVersion: number }, signal?: AbortSignal,
+): Promise<StoredRequirementDiff> {
+  if (!UUID.test(id)) throw new ApiError('需求 ID 无效', 400);
+  let response: Response;
+  try {
+    response = await fetch(`/api/requirements/${id}/diffs`, {
+      method: 'POST', signal, cache: 'no-store',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseVersion: input.baseVersion, targetVersion: input.targetVersion }),
+    });
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    throw new ApiError('无法连接本地 API，请确认服务已启动');
+  }
+  if (!response.ok) {
+    if (response.status === 404) throw new ApiError('需求或版本不存在', 404);
+    if (response.status === 400) throw new ApiError('请选择两个不同的版本进行比较', 400);
+    throw new ApiError(`API 请求失败：HTTP ${response.status}`, response.status);
+  }
+  try {
+    const stored = decodeStoredDiff(await response.json());
+    if (stored.requirement_id !== id) throw malformed();
+    return stored;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw malformed();
+  }
+}

@@ -181,8 +181,10 @@ test('the version history shows read-only snapshots and restores one as a new dr
   await page.getByRole('button', { name: '刷新' }).click();
   await rowOf(page, 'REQ-001').getByRole('button', { name: '版本历史' }).click();
   const dialog = page.getByRole('dialog');
-  await expect(dialog.getByText('V1')).toBeVisible();
-  await expect(dialog.getByText('V3')).toBeVisible();
+  // The versions are in their table; the two lists above it name versions too.
+  const table = dialog.getByRole('table', { name: '版本历史' });
+  await expect(table.getByRole('cell', { name: 'V1', exact: true })).toBeVisible();
+  await expect(table.getByRole('cell', { name: 'V3', exact: true })).toBeVisible();
   await dialog.getByRole('button', { name: '查看 V1' }).click();
   await expect(dialog.getByText('V1（只读快照）')).toBeVisible();
   await expect(dialog.getByText('背景内容')).toBeVisible();

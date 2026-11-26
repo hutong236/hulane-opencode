@@ -109,4 +109,38 @@ export function registerRequirementRoutes(app: FastifyInstance, database: () => 
     if (!version) return reply.code(404).send({ error: 'Requirement version not found' });
     return version;
   });
+
+  // Compare two versions and keep the result. Versions never change, so the same pair is stored once: the first
+  // request answers 201 and a later one 200 with the stored result.
+  app.post<{ Params: { id: string }; Body: unknown }>('/api/requirements/:id/diffs', async (request, reply) => {
+    if (!UUID.test(request.params.id)) return invalidId(reply);
+    const body = bodyOf(request.body);
+    try {
+      const { record, created } = database().requirementDiffs.create(
+        request.params.id, body.baseVersion as number, body.targetVersion as number,
+      );
+      return reply.code(created ? 201 : 200).send(record);
+    } catch (error) {
+      return failure(reply, error);
+    }
+  });
+
+  // Every comparison kept for one requirement, the newest first, without the changes.
+  app.get<{ Params: { id: string } }>('/api/requirements/:id/diffs', async (request, reply) => {
+    if (!UUID.test(request.params.id)) return invalidId(reply);
+    if (!database().requirements.find(request.params.id)) {
+      return reply.code(404).send({ error: 'Requirement not found' });
+    }
+    return { diffs: database().requirementDiffs.list(request.params.id) };
+  });
+
+  app.get<{ Params: { id: string; diffId: string } }>(
+    '/api/requirements/:id/diffs/:diffId', async (request, reply) => {
+      if (!UUID.test(request.params.id)) return invalidId(reply);
+      if (!UUID.test(request.params.diffId)) return reply.code(400).send({ error: 'Invalid requirement diff ID' });
+      const record = database().requirementDiffs.find(request.params.id, request.params.diffId);
+      if (!record) return reply.code(404).send({ error: 'Requirement diff not found' });
+      return record;
+    },
+  );
 }
