@@ -34,6 +34,13 @@ jobs:
       - name: Build
         working-directory: workbench
         run: npm run build
+      # The same pin as the root CI. With the CLI there, the adapter's tests start a real OpenCode server as well.
+      - name: Install the pinned OpenCode CLI
+        if: matrix.node == 22
+        run: npm install -g @opencode/cli@2.2.7
+      - name: Verify the OpenCode CLI version
+        if: matrix.node == 22
+        run: test "$(opencode --version | tr -d '\r\n')" = "opencode v2.2.7"
       - name: API tests
         working-directory: workbench
         run: npm test
