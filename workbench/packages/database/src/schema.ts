@@ -194,12 +194,44 @@ BEGIN
 END;
 `,
   },
+  {
+    version: 5,
+    name: 'opencode_servers',
+    // One OpenCode server per registered project at a time: the one the Workbench started, or one it attached to. A
+    // project keeps one row, replaced by its next server. No password is stored here: it lives in the memory of the
+    // Workbench process that started or attached to the server.
+    sql: `
+CREATE TABLE opencode_servers (
+  id TEXT PRIMARY KEY NOT NULL,
+  project_id TEXT NOT NULL UNIQUE REFERENCES projects(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK(kind IN ('managed','attached')),
+  directory TEXT NOT NULL,
+  base_url TEXT,
+  pid INTEGER CHECK(pid IS NULL OR pid > 0),
+  pid_started TEXT,
+  owner_pid INTEGER CHECK(owner_pid IS NULL OR owner_pid > 0),
+  version TEXT,
+  state TEXT NOT NULL CHECK(state IN (
+    'running','stopped','exited','orphaned','detached','unavailable','timeout','unauthorized','incompatible_version','replaced',
+    'not_installed','directory_unavailable','pid_mismatch','readonly_agent','refused','protocol'
+  )),
+  readonly_agent INTEGER NOT NULL CHECK(readonly_agent IN (0,1)),
+  started_at TEXT,
+  ended_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  CHECK(length(id) = 36),
+  -- A start that failed has no address and no version to report; a running server has both.
+  CHECK(state != 'running' OR (base_url IS NOT NULL AND version IS NOT NULL))
+);
+`,
+  },
 ] as const;
 
 export const EXPECTED_TABLES = [
   'projects', 'requirements', 'requirement_versions', 'requirement_diffs',
   'work_items', 'workflow_definitions', 'workflow_runs', 'workflow_steps',
-  'execution_events', 'approvals', 'project_tags',
+  'execution_events', 'approvals', 'project_tags', 'opencode_servers',
 ] as const;
 
 export function verifySchema(db: Sqlite.Database): void {

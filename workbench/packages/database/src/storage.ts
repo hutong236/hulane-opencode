@@ -7,6 +7,7 @@ import { isAbsolute, join, resolve, dirname } from 'node:path';
 import Sqlite from 'better-sqlite3';
 import { applyMigrations } from './migrate.js';
 import { verifySchema } from './schema.js';
+import { OpenCodeServerRepository } from './opencode-servers.js';
 import { ProjectRepository } from './projects.js';
 import { RequirementDiffRepository } from './requirement-diffs.js';
 import { RequirementRepository } from './requirements.js';
@@ -52,6 +53,7 @@ export class WorkbenchDatabase {
   readonly projects: ProjectRepository;
   readonly requirements: RequirementRepository;
   readonly requirementDiffs: RequirementDiffRepository;
+  readonly opencodeServers: OpenCodeServerRepository;
 
   constructor(options: DatabaseOptions = {}) {
     const directory = ensureSafeDirectory(options.dataDirectory || defaultDataDirectory());
@@ -75,6 +77,7 @@ export class WorkbenchDatabase {
     this.projects = new ProjectRepository(this.connection);
     this.requirements = new RequirementRepository(this.connection);
     this.requirementDiffs = new RequirementDiffRepository(this.connection, this.requirements);
+    this.opencodeServers = new OpenCodeServerRepository(this.connection);
   }
 
   transaction<T>(callback: () => T): T {

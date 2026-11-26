@@ -19,6 +19,7 @@ test('every shipped migration keeps its published checksum', () => {
     [2, 'project_remote_url', '58805dfe62ef81978f83a2ca49f562a6e4176d767ce7c0ea91ce6b34d29f44b6'],
     [3, 'project_tags', '061eb74850dd0fc5663f9cc6d924fcdab4440de388161cc2741b2bdce056745d'],
     [4, 'requirement_version_authors_and_immutability', 'afc91313e7d8512fed1f38fcf173b18af49437589a05a75ccb2db9df7bf29f97'],
+    [5, 'opencode_servers', '722ef24cd56c56c1571c60a2a552f792c3a90588d63b94e7ac071838495abc9f'],
   ]);
 });
 

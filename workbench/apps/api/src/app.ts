@@ -3,17 +3,24 @@ import { WorkbenchDatabase } from '@hulane/workbench-database';
 import { readRepositoryMetadata } from './repository-metadata.js';
 import { RepositoryRootError, validateRepositoryRoot } from './repository-root.js';
 import { readRepositoryStatus } from './repository-status.js';
+import { OpenCodeServers, registerOpenCodeRoutes, type OpenCodeOptions } from './opencode.js';
 import { registerRequirementRoutes } from './requirements.js';
 
 /** The reason names a kind of problem and is safe to show. The path itself is never echoed. */
 const reasonOf = (error: unknown) => error instanceof RepositoryRootError ? error.reason : 'not_git_root';
 
 /** Build an application without opening a socket, so tests can use inject(). */
-export function buildApp(options: { database?: WorkbenchDatabase } = {}) {
+export function buildApp(options: { database?: WorkbenchDatabase; opencode?: OpenCodeOptions } = {}) {
   const app = Fastify({ logger: true });
   let ownedDatabase: WorkbenchDatabase | undefined;
   const database = () => options.database ?? (ownedDatabase ??= new WorkbenchDatabase());
-  app.addHook('onClose', async () => { ownedDatabase?.close(); });
+  // In one hook, in this order: the servers are ended while their records can still be written.
+  const opencode = new OpenCodeServers(database, options.opencode);
+  app.decorate('opencode', opencode);
+  app.addHook('onClose', async () => {
+    await opencode.close();
+    ownedDatabase?.close();
+  });
   app.post<{ Body: { path?: string; slug?: string; name?: string } }>('/api/projects', async (request, reply) => {
     const body = request.body;
     if (typeof body?.path !== 'string' || typeof body.slug !== 'string' ||
@@ -93,6 +100,8 @@ export function buildApp(options: { database?: WorkbenchDatabase } = {}) {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
       return reply.code(400).send({ error: 'Invalid project ID' });
     }
+    // An OpenCode server the Workbench started for the project is ended first. The record of it goes with the project.
+    await opencode.forget(id);
     if (!database().projects.delete(id)) return reply.code(404).send({ error: 'Project not found' });
     return reply.code(204).send();
   });
@@ -121,5 +130,6 @@ export function buildApp(options: { database?: WorkbenchDatabase } = {}) {
     }
   });
   registerRequirementRoutes(app, database);
+  registerOpenCodeRoutes(app, () => opencode);
   return app;
 }
