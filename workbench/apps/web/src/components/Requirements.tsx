@@ -3,11 +3,14 @@ import {
   Alert, Button, Card, Descriptions, Form, Input, Modal, Select, Space, Table, Tag, Typography,
 } from 'antd';
 import { ConfirmAction, DataTable } from './UiPrimitives';
+import { RequirementDiffView } from './RequirementDiffView';
 import { SafeMarkdown } from './SafeMarkdown';
 import {
-  ApiError, ALLOWED_TRANSITIONS, createRequirement, getRequirement, getRequirements,
-  getRequirementVersions, restoreRequirement, transitionRequirement, updateRequirement,
-  type Requirement, type RequirementContent, type RequirementPriority, type RequirementVersion,
+  ALLOWED_TRANSITIONS, ApiError, compareRequirementVersions, createRequirement, getRequirement, getRequirementDiff,
+  getRequirementDiffs, getRequirements, getRequirementVersions, restoreRequirement, transitionRequirement,
+  updateRequirement,
+  type Requirement, type RequirementContent, type RequirementDiffRecord, type RequirementPriority,
+  type RequirementVersion, type StoredRequirementDiff,
 } from '../api/client';
 
 const STATUS_LABEL: Record<Requirement['status'], string> = {
@@ -113,6 +116,13 @@ export function Requirements() {
   const [historyFor, setHistoryFor] = useState<Requirement | null>(null);
   const [versions, setVersions] = useState<RequirementVersion[] | null>(null);
   const [viewedVersion, setViewedVersion] = useState<RequirementVersion | null>(null);
+  // The comparison of two versions: the selection, the stored comparisons and the one on show.
+  const [baseVersion, setBaseVersion] = useState<number>();
+  const [targetVersion, setTargetVersion] = useState<number>();
+  const [storedDiffs, setStoredDiffs] = useState<RequirementDiffRecord[] | null>(null);
+  const [shownDiff, setShownDiff] = useState<StoredRequirementDiff | null>(null);
+  const [comparing, setComparing] = useState(false);
+  const compareGuard = useRef(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [formError, setFormError] = useState('');
@@ -168,12 +178,54 @@ export function Requirements() {
     setHistoryFor(requirement);
     setVersions(null);
     setViewedVersion(null);
+    setShownDiff(null);
+    setStoredDiffs(null);
+    setBaseVersion(undefined);
+    setTargetVersion(undefined);
     try {
-      setVersions(await getRequirementVersions(requirement.id));
+      const list = await getRequirementVersions(requirement.id);
+      setVersions(list);
+      // The comparison people usually want is the latest change: the version before the current one against it.
+      if (list.length >= 2) {
+        setBaseVersion(list[list.length - 2].version);
+        setTargetVersion(list[list.length - 1].version);
+      }
     } catch (error) {
       setVersions([]);
       setFormError(error instanceof ApiError ? error.message : '版本历史加载失败');
     }
+    getRequirementDiffs(requirement.id).then(setStoredDiffs).catch(() => setStoredDiffs([]));
+  };
+
+  const closeHistory = () => {
+    setHistoryFor(null);
+    setViewedVersion(null);
+    setShownDiff(null);
+  };
+
+  const canCompare = baseVersion !== undefined && targetVersion !== undefined && baseVersion !== targetVersion;
+  const compare = async () => {
+    if (!historyFor || !canCompare || compareGuard.current) return;
+    compareGuard.current = true;
+    setComparing(true);
+    setFormError('');
+    try {
+      setShownDiff(await compareRequirementVersions(historyFor.id, { baseVersion, targetVersion }));
+      setStoredDiffs(await getRequirementDiffs(historyFor.id));
+    } catch (error) {
+      // The selection stays as it is, so another pair can be chosen straight away.
+      setFormError(error instanceof ApiError ? error.message : '比较失败，请重试');
+    } finally {
+      compareGuard.current = false;
+      setComparing(false);
+    }
+  };
+
+  const openStoredDiff = async (diffId: string) => {
+    if (!historyFor) return;
+    setFormError('');
+    try { setShownDiff(await getRequirementDiff(historyFor.id, diffId)); }
+    catch (error) { setFormError(error instanceof ApiError ? error.message : '差分加载失败'); }
   };
 
   const openEdit = (requirement: Requirement) => {
@@ -287,13 +339,40 @@ export function Requirements() {
     </Modal>
 
     <Modal title={historyFor ? `${historyFor.requirement_key} 的版本历史` : ''} open={historyFor !== null}
-      onCancel={() => { setHistoryFor(null); setViewedVersion(null); }} footer={null} width={720}>
+      onCancel={closeHistory} footer={null} width={860}>
       {formError && historyFor && !editOpen && !createOpen && <Alert type="error" showIcon message="操作失败"
         description={formError} style={{ marginBottom: 12 }} />}
       <Space style={{ marginBottom: 12 }}>
         <Input aria-label="操作人" placeholder="操作人" value={actor} style={{ width: 160 }}
           onChange={event => setActor(event.target.value)} />
       </Space>
+      <Space wrap style={{ marginBottom: 8 }} aria-label="版本比较">
+        <Select aria-label="基准版本" value={baseVersion} disabled={(versions?.length ?? 0) < 2} style={{ width: 110 }}
+          onChange={value => setBaseVersion(value)}
+          options={(versions ?? []).map(version => ({ value: version.version, label: `V${version.version}` }))} />
+        <Typography.Text>对比</Typography.Text>
+        <Select aria-label="目标版本" value={targetVersion} disabled={(versions?.length ?? 0) < 2} style={{ width: 110 }}
+          onChange={value => setTargetVersion(value)}
+          options={(versions ?? []).map(version => ({ value: version.version, label: `V${version.version}` }))} />
+        <Button type="primary" onClick={() => void compare()} disabled={!canCompare} loading={comparing}
+          aria-label="比较版本">比较版本</Button>
+      </Space>
+      {versions !== null && versions.length < 2 && <Typography.Text type="secondary" aria-label="无法比较">
+        至少要有两个版本才能比较。</Typography.Text>}
+      {shownDiff && <RequirementDiffView record={shownDiff} />}
+      {(storedDiffs?.length ?? 0) > 0 && <>
+        <Typography.Text strong style={{ display: 'block', marginTop: 12 }}>已保存的差分</Typography.Text>
+        <DataTable<RequirementDiffRecord> rowKey="id" aria-label="已保存的差分" dataSource={storedDiffs ?? []}
+          tableLayout="fixed" scroll={{ x: 820 }} pagination={{ pageSize: 5, size: 'small', hideOnSinglePage: true }} columns={[
+            { title: '版本', width: 120, render: (_, row) => `V${row.base_version} → V${row.target_version}` },
+            { title: '变化', ellipsis: true, render: (_, row) =>
+              `新增 ${row.summary.added} · 修改 ${row.summary.modified} · 删除 ${row.summary.deleted} · 待审核 ${row.summary.needs_review}` },
+            { title: '时间', dataIndex: 'created_at', width: 180 },
+            { title: '操作', width: 80, render: (_, row) => <Button size="small"
+              onClick={() => void openStoredDiff(row.id)}
+              aria-label={`查看差分 V${row.base_version} 到 V${row.target_version}`}>查看</Button> },
+          ]} />
+      </>}
       <DataTable<RequirementVersion> rowKey="id" aria-label="版本历史" dataSource={versions ?? []}
         loading={versions === null} tableLayout="fixed" scroll={{ x: 820 }} columns={[
           { title: '版本', width: 70, render: (_, row) => `V${row.version}` },
